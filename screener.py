@@ -72,7 +72,7 @@ def screen_stocks(
     min_drop: float = 20.0,
     max_drop: float = 30.0,
     exclude_sudden_drops: bool = True,
-    max_workers: int = 10
+    max_workers: int = 5
 ) -> List[Dict]:
     """
     Screen multiple stocks for price drops.
