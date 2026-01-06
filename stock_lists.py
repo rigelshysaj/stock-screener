@@ -141,6 +141,52 @@ HANGSENG = [
     "1928.HK"
 ]
 
+# Russell 2000 - Small Cap US Stocks (representative sample of ~300 stocks)
+RUSSELL2000 = [
+    # Financial Services
+    "BANF", "BANR", "BFC", "BHLB", "BRKL", "BUSE", "BWB", "BY", "CBSH", "CCB",
+    "CFFN", "CHCO", "CIVB", "CNOB", "CSTR", "CVBF", "CWBC", "DCOM", "EBSB", "EFSC",
+    "EGBN", "ESQ", "EVBN", "FBMS", "FBNC", "FCBC", "FFBW", "FFIC", "FLIC", "FMBH",
+    "FMNB", "FNLC", "FRME", "FULT", "GABC", "GCBC", "GNTY", "GSBC", "HAFC", "HBT",
+    "HFWA", "HMST", "HONE", "HOPE", "HTBI", "HTLF", "HWBK", "IBTX", "KRNY", "LBAI",
+    # Healthcare & Biotech
+    "ABCL", "ACAD", "AGEN", "AGIO", "AKRO", "ALEC", "ALLK", "ALNY", "AMPH", "ANAB",
+    "ANIK", "APLS", "APLT", "ARCT", "ARDX", "ARNA", "ARWR", "ATEC", "AUPH", "AVNS",
+    "AXGN", "AXNX", "AZTA", "BCOV", "BEAM", "BCRX", "BDSI", "BHVN", "BIOR", "BPMC",
+    "CARA", "CARG", "CERS", "CGEM", "CHRS", "CLVR", "CNMD", "COGT", "CRNX", "CRSP",
+    "CRVS", "CSTL", "CTMX", "DCPH", "DNLI", "DRNA", "EDIT", "ENTA", "EPZM", "EWTX",
+    # Technology
+    "ACIW", "ADTN", "AGYS", "ALIT", "AMBA", "AMKR", "APPF", "APPN", "APTI", "ARRY",
+    "ATKR", "ATML", "AVAV", "AVLR", "BAND", "BBCP", "BCOV", "BLKB", "BMRN", "BOXL",
+    "BRKS", "CALX", "CAMP", "CASA", "CCMP", "CCSI", "CEVA", "CHKP", "CIEN", "CLDR",
+    "CLFD", "CMTL", "COHU", "COMM", "COUP", "CRUS", "CSGS", "CSOD", "CTXS", "CVLT",
+    "CWST", "CYBR", "DDOG", "DIGI", "DIOD", "DLB", "DOCU", "DOX", "DSGX", "EGHT",
+    # Industrials
+    "AAON", "ABCB", "ABG", "ABM", "AEIS", "AGCO", "AIMC", "AIN", "ALEX", "ALG",
+    "ALSN", "AMED", "AMRC", "AMWD", "AOSL", "APOG", "ARCB", "AROC", "ASGN", "ASPN",
+    "AYI", "AZEK", "BCPC", "BDC", "BERY", "BGS", "BLDR", "BMI", "BRC", "BWXT",
+    "CAKE", "CALX", "CARG", "CARS", "CASY", "CBRL", "CBZ", "CCK", "CCRN", "CDW",
+    "CENT", "CENTA", "CFR", "CHE", "CHGG", "CLF", "CLOV", "CLW", "CMC", "CMP",
+    # Consumer
+    "AAN", "ABMD", "ABR", "ACC", "ACHC", "ACIW", "ACLS", "ACRE", "ADNT", "ADT",
+    "AHCO", "AHH", "AI", "AIT", "AJG", "ALGT", "ALV", "AMAL", "AMC", "AMCX",
+    "AMN", "AMPH", "AMRC", "AMRK", "AMWD", "ANGI", "ANH", "APAM", "APD", "APH",
+    "APPF", "APPS", "APTS", "ARCO", "ARNC", "AROC", "ARRY", "ASAN", "ASND", "ATEX",
+    "ATI", "ATNI", "ATO", "ATRA", "ATRC", "ATRI", "AVA", "AVAV", "AVNT", "AVT",
+    # More small caps
+    "AXON", "AXS", "AY", "AYI", "AZPN", "AZZ", "B", "BANC", "BANF", "BANR",
+    "BC", "BCC", "BCOR", "BDGE", "BDN", "BELFB", "BGFV", "BGG", "BHE", "BIGC",
+    "BKEP", "BKH", "BKU", "BL", "BLBD", "BLFS", "BLKB", "BLMN", "BNED", "BNL",
+    "BOH", "BOOT", "BOX", "BPFH", "BPMC", "BPOP", "BPRN", "BRC", "BRFS", "BRG",
+    "BRKL", "BRSP", "BRT", "BSIG", "BSVN", "BTU", "BUSE", "BV", "BVN", "BWA",
+    # Energy & Materials
+    "BCEI", "BKR", "BRY", "BTEG", "CAPL", "CEIX", "CHAP", "CLR", "CLNE", "CNX",
+    "CRK", "CRZO", "CTRA", "CVI", "CVR", "DEN", "DK", "DNR", "DMLP", "ENLC",
+    "ERF", "EVA", "FANG", "FET", "FLNG", "GEVO", "GLNG", "GNE", "GPP", "GPRE",
+    "GRNT", "HAL", "HES", "HESM", "HFC", "HP", "HPR", "INDO", "KOS", "LNG",
+    "LONE", "LPI", "MPC", "MTDR", "MUR", "NGL", "NOG", "NRP", "NS", "OAS"
+]
+
 # All markets combined
 MARKETS = {
     "sp500": {
@@ -151,6 +197,11 @@ MARKETS = {
     "nasdaq": {
         "name": "NASDAQ 100 (USA)",
         "tickers": NASDAQ100,
+        "currency": "USD"
+    },
+    "russell2000": {
+        "name": "Russell 2000 (Small Cap USA)",
+        "tickers": RUSSELL2000,
         "currency": "USD"
     },
     "dax": {

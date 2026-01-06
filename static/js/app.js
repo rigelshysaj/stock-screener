@@ -28,22 +28,37 @@ function initDataTable() {
     });
 }
 
-// Get selected market (single radio button)
-function getSelectedMarket() {
-    return $('input[name="market"]:checked').val();
+// Get selected markets (checkboxes)
+function getSelectedMarkets() {
+    const selected = [];
+    $('input[name="market"]:checked').each(function() {
+        selected.push($(this).val());
+    });
+    return selected;
 }
 
-// Start scanning with batch support
-async function startScan() {
-    const market = getSelectedMarket();
+// Select all markets
+function selectAllMarkets() {
+    $('input[name="market"]').prop('checked', true);
+}
 
-    if (!market) {
-        alert('Please select a market to scan.');
+// Clear all markets
+function clearAllMarkets() {
+    $('input[name="market"]').prop('checked', false);
+}
+
+// Start scanning with batch support - collects all results before displaying
+async function startScan() {
+    const markets = getSelectedMarkets();
+
+    if (markets.length === 0) {
+        alert('Please select at least one market to scan.');
         return;
     }
 
     const minDrop = parseFloat($('#min-drop').val()) || 20;
     const maxDrop = parseFloat($('#max-drop').val()) || 30;
+    const lookbackDays = parseInt($('#lookback-days').val()) || 2;
 
     // Validate range
     if (minDrop >= maxDrop) {
@@ -56,11 +71,12 @@ async function startScan() {
     $('#scan-text').text('Scanning...');
     $('#scan-spinner').removeClass('d-none');
     $('#status-bar').removeClass('d-none').addClass('alert-info').removeClass('alert-success alert-danger');
-    $('#status-text').text(`Scanning ${market.toUpperCase()}...`);
+    $('#status-text').text(`Scanning ${markets.length} market(s)...`);
 
     // Clear previous results
     currentResults = [];
     dataTable.clear().draw();
+    $('#results-count').text('Scanning...');
 
     const batchSize = 100;
     let batch = 0;
@@ -69,7 +85,7 @@ async function startScan() {
     let totalTickers = 0;
 
     try {
-        // Fetch batches until no more
+        // Phase 1: Fetch all stock data in batches
         while (hasMore) {
             const response = await fetch('/api/scan', {
                 method: 'POST',
@@ -77,9 +93,10 @@ async function startScan() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    markets: [market],
+                    markets: markets,
                     min_drop: minDrop,
                     max_drop: maxDrop,
+                    lookback_days: lookbackDays,
                     batch: batch,
                     batch_size: batchSize
                 })
@@ -99,25 +116,33 @@ async function startScan() {
             // Add new stocks to results
             if (data.stocks && data.stocks.length > 0) {
                 currentResults = currentResults.concat(data.stocks);
-                // Update table progressively
-                appendToResultsTable(data.stocks);
             }
 
-            // Update progress
-            const progress = Math.min(100, Math.round((totalScanned / totalTickers) * 100));
-            $('#status-text').text(`Scanning ${market.toUpperCase()}... ${progress}% (${totalScanned}/${totalTickers} stocks)`);
-            $('#results-count').text(`${currentResults.length} stocks found`);
+            // Update progress - Phase 1: Stock scanning
+            const scanProgress = Math.min(50, Math.round((totalScanned / totalTickers) * 50));
+            $('#status-text').text(`Scanning stocks... ${scanProgress * 2}% (${totalScanned}/${totalTickers})`);
 
             batch++;
         }
 
+        if (currentResults.length === 0) {
+            $('#status-bar').removeClass('alert-info').addClass('alert-warning');
+            $('#status-text').text(`No stocks found with ${minDrop}-${maxDrop}% drop in last ${lookbackDays} day(s). Scanned ${totalTickers} tickers.`);
+            $('#results-count').text('0 stocks found');
+            return;
+        }
+
+        // Phase 2: Load all news/safety data
+        $('#status-text').text(`Loading safety analysis for ${currentResults.length} stocks...`);
+        await loadAllNewsData(currentResults);
+
+        // Phase 3: Display all results at once
+        displayAllResults(currentResults);
+
         // Final update
         $('#status-bar').removeClass('alert-info').addClass('alert-success');
-        $('#status-text').text(`Scan complete! Found ${currentResults.length} stocks matching criteria. Scanned ${totalTickers} tickers.`);
+        $('#status-text').text(`Complete! Found ${currentResults.length} stocks with ${minDrop}-${maxDrop}% drop in last ${lookbackDays} day(s). Scanned ${totalTickers} tickers.`);
         $('#results-count').text(`${currentResults.length} stocks found`);
-
-        // Load news analysis progressively
-        loadNewsProgressively(currentResults);
 
     } catch (error) {
         console.error('Scan error:', error);
@@ -129,6 +154,64 @@ async function startScan() {
         $('#scan-text').text('Start Scan');
         $('#scan-spinner').addClass('d-none');
     }
+}
+
+// Load all news/safety data for stocks
+async function loadAllNewsData(stocks) {
+    let loaded = 0;
+    const total = stocks.length;
+
+    for (const stock of stocks) {
+        try {
+            const response = await fetch(`/api/stock/${stock.ticker}/news`);
+            if (response.ok) {
+                const analysis = await response.json();
+                stock.safety_score = analysis.safety_score;
+                stock.assessment = analysis.assessment || 'unknown';
+                stock.safety_message = analysis.message || '';
+                stock.critical_keywords = analysis.critical_keywords_found || [];
+            } else {
+                stock.safety_score = null;
+                stock.assessment = 'unknown';
+                stock.safety_message = 'Unable to load';
+            }
+        } catch (error) {
+            console.warn(`Error loading news for ${stock.ticker}:`, error);
+            stock.safety_score = null;
+            stock.assessment = 'unknown';
+            stock.safety_message = 'Error loading';
+        }
+
+        loaded++;
+        const progress = Math.round((loaded / total) * 100);
+        $('#status-text').text(`Loading safety analysis... ${progress}% (${loaded}/${total})`);
+    }
+}
+
+// Display all results at once with safety data
+function displayAllResults(stocks) {
+    dataTable.clear();
+
+    stocks.forEach(stock => {
+        const safetyHtml = formatSafetyBadge(
+            stock.safety_score,
+            stock.assessment,
+            stock.safety_message
+        );
+
+        dataTable.row.add([
+            formatTicker(stock.ticker),
+            truncateName(stock.name, 30),
+            stock.sector || 'N/A',
+            formatPrice(stock.current_price, stock.currency),
+            formatPrice(stock.reference_price || stock.high_52w, stock.currency),
+            formatDropPct(stock.drop_pct),
+            safetyHtml
+        ]);
+    });
+
+    dataTable.draw();
+    setupRowClickHandlers();
 }
 
 // Update results table (full replace)

@@ -51,6 +51,7 @@ def scan_stocks():
         "markets": ["sp500", "nasdaq"],  // Market keys to scan
         "min_drop": 20,                   // Minimum drop percentage
         "max_drop": 30,                   // Maximum drop percentage
+        "lookback_days": 2,               // Days to look back (1 or 2)
         "batch": 0,                       // Batch number (0-indexed)
         "batch_size": 100                 // Stocks per batch
     }
@@ -61,6 +62,7 @@ def scan_stocks():
     market_keys = data.get('markets', ['sp500'])
     min_drop = float(data.get('min_drop', 20))
     max_drop = float(data.get('max_drop', 30))
+    lookback_days = int(data.get('lookback_days', 2))
     batch = int(data.get('batch', 0))
     batch_size = int(data.get('batch_size', 100))
 
@@ -85,13 +87,13 @@ def scan_stocks():
 
     logger.info(f"Scanning {len(tickers)} stocks from markets: {market_keys}")
 
-    # Screen stocks for price drops
+    # Screen stocks for price drops in last N days
     try:
         stocks = screen_stocks(
             tickers,
             min_drop=min_drop,
             max_drop=max_drop,
-            exclude_sudden_drops=True
+            lookback_days=lookback_days
         )
     except Exception as e:
         logger.error(f"Error screening stocks: {e}")
@@ -107,7 +109,8 @@ def scan_stocks():
         "tickers_scanned": len(tickers),
         "parameters": {
             "min_drop": min_drop,
-            "max_drop": max_drop
+            "max_drop": max_drop,
+            "lookback_days": lookback_days
         },
         "stocks": stocks,
         # Batch metadata for frontend

@@ -30,11 +30,11 @@
                 <div class="row">
                     <!-- Markets Selection -->
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Select Market</label>
+                        <label class="form-label fw-bold">Select Markets</label>
                         <div class="markets-grid" id="markets-container">
                             {% for key, market in markets.items() %}
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="market"
+                                <input class="form-check-input" type="checkbox" name="market"
                                        value="{{ key }}" id="market-{{ key }}"
                                        {% if key == 'sp500' %}checked{% endif %}>
                                 <label class="form-check-label" for="market-{{ key }}">
@@ -44,22 +44,33 @@
                             </div>
                             {% endfor %}
                         </div>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllMarkets()">Select All</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllMarkets()">Clear All</button>
+                        </div>
                     </div>
 
                     <!-- Drop Range -->
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Price Drop Range</label>
+                        <label class="form-label fw-bold">Price Drop Range (in last N days)</label>
                         <div class="range-container mb-3">
                             <div class="row">
-                                <div class="col-6">
+                                <div class="col-4">
                                     <label class="form-label">Min Drop %</label>
                                     <input type="number" class="form-control" id="min-drop"
                                            value="20" min="5" max="95" step="1">
                                 </div>
-                                <div class="col-6">
+                                <div class="col-4">
                                     <label class="form-label">Max Drop %</label>
                                     <input type="number" class="form-control" id="max-drop"
                                            value="30" min="10" max="100" step="1">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label">Days</label>
+                                    <select class="form-select" id="lookback-days">
+                                        <option value="1">1 day</option>
+                                        <option value="2" selected>2 days</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -93,7 +104,7 @@
                                 <th>Name</th>
                                 <th>Sector</th>
                                 <th>Current</th>
-                                <th>52W High</th>
+                                <th>Before Drop</th>
                                 <th>Drop %</th>
                                 <th>Safety</th>
                             </tr>

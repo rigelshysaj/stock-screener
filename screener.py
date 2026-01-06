@@ -1,6 +1,6 @@
 """
 Stock screener module.
-Identifies stocks that have dropped 20-30% from their 52-week high.
+Identifies stocks that have dropped 20-30% in the last 1-2 days.
 """
 
 import yfinance as yf
@@ -13,37 +13,51 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def get_stock_data(ticker: str) -> Optional[Dict]:
+def get_stock_data(ticker: str, lookback_days: int = 2) -> Optional[Dict]:
     """
     Fetch stock data for a single ticker.
+    Looks for price drops in the last 1-2 days.
+
+    Args:
+        ticker: Stock ticker symbol
+        lookback_days: Number of days to look back (1 or 2)
+
     Returns dict with price info or None if failed.
     """
     try:
         stock = yf.Ticker(ticker)
 
-        # Get historical data for 52 weeks
-        hist = stock.history(period="1y")
+        # Get historical data for last 10 days (to have enough data)
+        hist = stock.history(period="10d")
 
-        if hist.empty:
+        if hist.empty or len(hist) < 2:
             return None
 
-        # Get current price and 52-week high
+        # Get current price (last close)
         current_price = hist['Close'].iloc[-1]
-        high_52w = hist['High'].max()
-        low_52w = hist['Low'].min()
 
-        # Calculate drop percentage
-        drop_pct = ((high_52w - current_price) / high_52w) * 100
+        # Get reference price (1 or 2 days ago)
+        if lookback_days == 1 and len(hist) >= 2:
+            reference_price = hist['Close'].iloc[-2]  # Yesterday's close
+            reference_high = hist['High'].iloc[-2]    # Yesterday's high
+        elif lookback_days == 2 and len(hist) >= 3:
+            # Use the max of the last 2 days before today
+            reference_price = max(hist['Close'].iloc[-3], hist['Close'].iloc[-2])
+            reference_high = max(hist['High'].iloc[-3], hist['High'].iloc[-2])
+        else:
+            reference_price = hist['Close'].iloc[-2]
+            reference_high = hist['High'].iloc[-2]
+
+        # Calculate drop percentage from reference price
+        drop_pct = ((reference_high - current_price) / reference_high) * 100
+
+        # Also get 52-week data for context
+        hist_1y = stock.history(period="1y")
+        high_52w = hist_1y['High'].max() if not hist_1y.empty else reference_high
+        low_52w = hist_1y['Low'].min() if not hist_1y.empty else current_price
 
         # Get stock info
         info = stock.info
-
-        # Check if drop was sudden (more than 10% in last 5 days)
-        if len(hist) >= 5:
-            price_5d_ago = hist['Close'].iloc[-5]
-            sudden_drop = bool(((price_5d_ago - current_price) / price_5d_ago) * 100 > 10)
-        else:
-            sudden_drop = False
 
         return {
             "ticker": ticker,
@@ -51,15 +65,16 @@ def get_stock_data(ticker: str) -> Optional[Dict]:
             "sector": info.get("sector", "N/A"),
             "industry": info.get("industry", "N/A"),
             "current_price": float(round(current_price, 2)),
+            "reference_price": float(round(reference_high, 2)),  # Price before drop
             "high_52w": float(round(high_52w, 2)),
             "low_52w": float(round(low_52w, 2)),
             "drop_pct": float(round(drop_pct, 2)),
             "currency": info.get("currency", "USD"),
             "market_cap": info.get("marketCap", 0),
-            "sudden_drop": sudden_drop,
             "volume": info.get("averageVolume", 0),
             "pe_ratio": info.get("trailingPE", None),
-            "dividend_yield": info.get("dividendYield", None)
+            "dividend_yield": info.get("dividendYield", None),
+            "lookback_days": lookback_days
         }
 
     except Exception as e:
@@ -71,17 +86,17 @@ def screen_stocks(
     tickers: List[str],
     min_drop: float = 20.0,
     max_drop: float = 30.0,
-    exclude_sudden_drops: bool = True,
+    lookback_days: int = 2,
     max_workers: int = 5
 ) -> List[Dict]:
     """
-    Screen multiple stocks for price drops.
+    Screen multiple stocks for price drops in the last 1-2 days.
 
     Args:
         tickers: List of ticker symbols
         min_drop: Minimum drop percentage (default 20%)
         max_drop: Maximum drop percentage (default 30%)
-        exclude_sudden_drops: Exclude stocks with sudden drops (>10% in 5 days)
+        lookback_days: Number of days to look back (1 or 2)
         max_workers: Number of parallel threads
 
     Returns:
@@ -91,10 +106,10 @@ def screen_stocks(
     total = len(tickers)
     processed = 0
 
-    logger.info(f"Screening {total} stocks...")
+    logger.info(f"Screening {total} stocks for drops in last {lookback_days} days...")
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(get_stock_data, ticker): ticker for ticker in tickers}
+        futures = {executor.submit(get_stock_data, ticker, lookback_days): ticker for ticker in tickers}
 
         for future in as_completed(futures):
             processed += 1
@@ -106,14 +121,10 @@ def screen_stocks(
                 if data is None:
                     continue
 
-                # Apply filters
+                # Apply filters - only include stocks with drops in the specified range
                 if min_drop <= data["drop_pct"] <= max_drop:
-                    if exclude_sudden_drops and data["sudden_drop"]:
-                        logger.info(f"Excluding {ticker} - sudden drop detected")
-                        continue
-
                     results.append(data)
-                    logger.info(f"Found: {ticker} - Drop: {data['drop_pct']}%")
+                    logger.info(f"Found: {ticker} - Drop: {data['drop_pct']}% in last {lookback_days} days")
 
             except Exception as e:
                 logger.warning(f"Error processing {ticker}: {e}")
