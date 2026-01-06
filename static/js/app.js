@@ -8,12 +8,6 @@ let currentResults = [];
 // Initialize DataTable when document is ready
 $(document).ready(function() {
     initDataTable();
-    updateTickerCount();
-
-    // Update count when checkboxes change
-    $(document).on('change', '.market-checkbox', function() {
-        updateTickerCount();
-    });
 });
 
 function initDataTable() {
@@ -34,82 +28,17 @@ function initDataTable() {
     });
 }
 
-// Ticker counts per market (must match backend)
-const MARKET_TICKER_COUNTS = {
-    'sp500': 100,
-    'nasdaq': 100,
-    'dax': 40,
-    'cac': 40,
-    'ftse': 90,
-    'mib': 40,
-    'nikkei': 50,
-    'hangseng': 50
-};
-
-const MAX_TICKERS = 150;
-
-// Get selected markets (multiple checkboxes)
-function getSelectedMarkets() {
-    const selected = [];
-    $('.market-checkbox:checked').each(function() {
-        selected.push($(this).val());
-    });
-    return selected;
-}
-
-// Calculate total tickers for selected markets
-function getTotalTickerCount() {
-    const markets = getSelectedMarkets();
-    let total = 0;
-    markets.forEach(m => {
-        total += MARKET_TICKER_COUNTS[m] || 0;
-    });
-    return total;
-}
-
-// Update ticker count display
-function updateTickerCount() {
-    const count = getTotalTickerCount();
-    const countEl = $('#ticker-count');
-    countEl.text(`${count} tickers selected`);
-
-    if (count > MAX_TICKERS) {
-        countEl.removeClass('text-muted text-success').addClass('text-danger');
-        $('#scan-btn').prop('disabled', true);
-        countEl.text(`${count} tickers - max ${MAX_TICKERS} allowed!`);
-    } else if (count > 0) {
-        countEl.removeClass('text-muted text-danger').addClass('text-success');
-        $('#scan-btn').prop('disabled', false);
-    } else {
-        countEl.removeClass('text-success text-danger').addClass('text-muted');
-        $('#scan-btn').prop('disabled', false);
-    }
-}
-
-// Select all markets
-function selectAllMarkets() {
-    $('.market-checkbox').prop('checked', true);
-    updateTickerCount();
-}
-
-// Deselect all markets
-function deselectAllMarkets() {
-    $('.market-checkbox').prop('checked', false);
-    updateTickerCount();
+// Get selected market (single radio button)
+function getSelectedMarket() {
+    return $('input[name="market"]:checked').val();
 }
 
 // Start scanning
 async function startScan() {
-    const markets = getSelectedMarkets();
+    const market = getSelectedMarket();
 
-    if (markets.length === 0) {
-        alert('Please select at least one market to scan.');
-        return;
-    }
-
-    const tickerCount = getTotalTickerCount();
-    if (tickerCount > MAX_TICKERS) {
-        alert(`Too many tickers selected (${tickerCount}). Maximum is ${MAX_TICKERS}. Please deselect some markets.`);
+    if (!market) {
+        alert('Please select a market to scan.');
         return;
     }
 
@@ -127,8 +56,7 @@ async function startScan() {
     $('#scan-text').text('Scanning...');
     $('#scan-spinner').removeClass('d-none');
     $('#status-bar').removeClass('d-none').addClass('alert-info').removeClass('alert-success alert-danger');
-    const marketNames = markets.map(m => m.toUpperCase()).join(', ');
-    $('#status-text').text(`Scanning ${marketNames}... This may take a few minutes.`);
+    $('#status-text').text(`Scanning ${market.toUpperCase()}... This may take a few minutes.`);
 
     try {
         const response = await fetch('/api/scan', {
@@ -137,7 +65,7 @@ async function startScan() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                markets: markets,
+                markets: [market],
                 min_drop: minDrop,
                 max_drop: maxDrop
             })

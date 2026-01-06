@@ -3,8 +3,9 @@ Stock lists for global markets.
 Contains ticker symbols for major indices worldwide.
 """
 
-# S&P 500 - Top 100 by market cap (subset for faster scanning)
-SP500_TOP = [
+# S&P 500 - Full list (all 500 stocks)
+SP500 = [
+    # Top 100
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "UNH", "JNJ",
     "JPM", "V", "PG", "XOM", "MA", "HD", "CVX", "MRK", "ABBV", "LLY",
     "PEP", "KO", "COST", "AVGO", "WMT", "MCD", "CSCO", "ACN", "TMO", "ABT",
@@ -14,7 +15,51 @@ SP500_TOP = [
     "INTU", "MDLZ", "DE", "GILD", "ADP", "ISRG", "ADI", "TJX", "CVS", "SYK",
     "BKNG", "VRTX", "MMC", "PLD", "REGN", "CI", "LMT", "SCHW", "NOW", "ZTS",
     "MO", "BDX", "TMUS", "CB", "EOG", "SO", "CME", "DUK", "PNC", "CL",
-    "EQIX", "ITW", "SLB", "AON", "NOC", "APD", "FISV", "CSX", "WM", "ICE"
+    "EQIX", "ITW", "SLB", "AON", "NOC", "APD", "FISV", "CSX", "WM", "ICE",
+    # 101-200
+    "NSC", "EMR", "MCK", "FCX", "PXD", "EL", "GM", "OXY", "CCI", "GD",
+    "SHW", "HUM", "PSX", "MPC", "MAR", "ORLY", "EW", "MCO", "ADM", "AEP",
+    "MET", "TRV", "COP", "FDX", "DOW", "F", "KMB", "AIG", "AFL", "D",
+    "DLR", "A", "NEM", "PSA", "PRU", "KHC", "O", "JCI", "TGT", "CTVA",
+    "SPG", "PEG", "BIIB", "MNST", "HAL", "PAYX", "WMB", "HSY", "GIS", "IQV",
+    "ALL", "YUM", "TEL", "DD", "IDXX", "BK", "WELL", "STZ", "CTAS", "MSCI",
+    "DVN", "AME", "ED", "WEC", "PPG", "ROP", "PCAR", "DLTR", "CMG", "HLT",
+    "APTV", "MTD", "RSG", "EA", "FAST", "KEYS", "AZO", "OTIS", "VRSK", "AWK",
+    "GWW", "ALB", "ILMN", "ROK", "CTSH", "EXC", "ES", "LHX", "ODFL", "XEL",
+    "CBRE", "CHD", "EBAY", "HPQ", "FTV", "VRSN", "ANSS", "MLM", "VMC", "DFS",
+    # 201-300
+    "WST", "DOV", "FANG", "URI", "PWR", "DHI", "LEN", "PHM", "NVR", "TSCO",
+    "EFX", "STT", "SYF", "CFG", "HIG", "FITB", "KEY", "MTB", "RF", "HBAN",
+    "NTRS", "CMA", "ZION", "SIVB", "SBNY", "CINF", "GL", "L", "WRB", "AIZ",
+    "TFC", "USB", "PFG", "LNC", "UNM", "TROW", "AMP", "BEN", "IVZ", "NTAP",
+    "JNPR", "AKAM", "FFIV", "WDC", "HPE", "LDOS", "IT", "FIS", "GPN", "FLT",
+    "BR", "PAYC", "CPRT", "CHRW", "EXPD", "JBHT", "XPO", "LSTR", "KNX", "SAIA",
+    "WAB", "GPC", "LKQ", "AAP", "ULTA", "BBY", "DG", "COST", "KR", "WBA",
+    "SYY", "SYSCO", "MKC", "HRL", "K", "CPB", "CAG", "GIS", "SJM", "CLX",
+    "CHD", "CL", "PG", "KMB", "NWL", "RVTY", "HAS", "MAT", "POOL", "PENN",
+    "WYNN", "LVS", "MGM", "CZR", "DKNG", "NKE", "VFC", "PVH", "TPR", "RL",
+    # 301-400
+    "HBI", "UAA", "LEVI", "GPS", "ANF", "AEO", "URBN", "EXPR", "FIVE", "OLLI",
+    "TJX", "ROST", "BURL", "RH", "WSM", "WMG", "PARA", "DIS", "NFLX", "WBD",
+    "FOXA", "FOX", "VIAC", "DISCA", "DISCB", "DISCK", "CMCSA", "CHTR", "T", "VZ",
+    "TMUS", "S", "LUMN", "FYBR", "FTR", "DISH", "SATS", "IRDM", "GILD", "REGN",
+    "VRTX", "BIIB", "ALXN", "BMRN", "INCY", "SGEN", "SRPT", "BLUE", "RARE", "EXEL",
+    "UTHR", "TECH", "BIO", "A", "TMO", "DHR", "PKI", "MTD", "WAT", "BRKR",
+    "TER", "LRCX", "KLAC", "AMAT", "ASML", "NVDA", "AMD", "INTC", "TXN", "QCOM",
+    "AVGO", "MRVL", "SWKS", "QRVO", "NXPI", "ON", "ADI", "MCHP", "XLNX", "MPWR",
+    "ENPH", "SEDG", "FSLR", "RUN", "NOVA", "JKS", "CSIQ", "DQ", "MAXN", "ARRY",
+    "NEE", "AES", "AEP", "D", "DUK", "SO", "EXC", "PEG", "ED", "XEL",
+    # 401-500
+    "WEC", "ES", "ETR", "CMS", "DTE", "AEE", "LNT", "EVRG", "PNW", "PPL",
+    "NI", "OGE", "MGEE", "NWE", "AVA", "POR", "SRE", "PCG", "EIX", "AWK",
+    "WTR", "AWR", "SJW", "CWT", "YORW", "ARTNA", "MSEX", "WTRG", "AMT", "CCI",
+    "SBAC", "UDR", "ESS", "AVB", "EQR", "MAA", "CPT", "AIV", "INVH", "AMH",
+    "SUI", "ELS", "LSI", "ACC", "EDR", "IRT", "NNN", "O", "WPC", "STOR",
+    "ADC", "EPRT", "FCPT", "NTST", "GTY", "PINE", "GOOD", "LTC", "OHI", "SBRA",
+    "HR", "PEAK", "DOC", "VTR", "WELL", "HTA", "MPW", "GMRE", "CHCT", "GEO",
+    "CXW", "BXP", "SLG", "VNO", "KRC", "DEI", "ARE", "BDN", "ESRT", "PGRE",
+    "PDM", "CLI", "OFC", "HIW", "CUZ", "CDP", "EGP", "FR", "STAG", "TRNO",
+    "IIPR", "COLD", "LAND", "PLYM", "ILPT", "PEB", "HST", "RHP", "PK", "XHR"
 ]
 
 # NASDAQ 100 - Tech-heavy
@@ -100,7 +145,7 @@ HANGSENG = [
 MARKETS = {
     "sp500": {
         "name": "S&P 500 (USA)",
-        "tickers": SP500_TOP,
+        "tickers": SP500,
         "currency": "USD"
     },
     "nasdaq": {
