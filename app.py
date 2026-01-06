@@ -52,6 +52,8 @@ def scan_stocks():
         "min_drop": 20,                   // Minimum drop percentage
         "max_drop": 30,                   // Maximum drop percentage
         "lookback_days": 2,               // Days to look back (1 or 2)
+        "price_provider": "auto",         // auto, yfinance, stooq, alphavantage
+        "include_info": true,             // Fetch Yahoo metadata for matched tickers
         "batch": 0,                       // Batch number (0-indexed)
         "batch_size": 100                 // Stocks per batch
     }
@@ -63,6 +65,8 @@ def scan_stocks():
     min_drop = float(data.get('min_drop', 20))
     max_drop = float(data.get('max_drop', 30))
     lookback_days = int(data.get('lookback_days', 2))
+    price_provider = data.get('price_provider')
+    include_info = bool(data.get('include_info', True))
     batch = int(data.get('batch', 0))
     batch_size = int(data.get('batch_size', 100))
 
@@ -93,7 +97,9 @@ def scan_stocks():
             tickers,
             min_drop=min_drop,
             max_drop=max_drop,
-            lookback_days=lookback_days
+            lookback_days=lookback_days,
+            include_info=include_info,
+            price_provider=price_provider
         )
     except Exception as e:
         logger.error(f"Error screening stocks: {e}")
@@ -110,7 +116,9 @@ def scan_stocks():
         "parameters": {
             "min_drop": min_drop,
             "max_drop": max_drop,
-            "lookback_days": lookback_days
+            "lookback_days": lookback_days,
+            "price_provider": price_provider or "auto",
+            "include_info": include_info
         },
         "stocks": stocks,
         # Batch metadata for frontend
@@ -127,7 +135,8 @@ def scan_stocks():
 def get_stock(ticker):
     """Get detailed information for a specific stock."""
     try:
-        details = get_stock_details(ticker.upper())
+        price_provider = request.args.get('price_provider')
+        details = get_stock_details(ticker.upper(), price_provider=price_provider)
 
         if not details:
             return jsonify({"error": f"Stock {ticker} not found"}), 404
