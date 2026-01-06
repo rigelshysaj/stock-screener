@@ -33,7 +33,7 @@ function getSelectedMarket() {
     return $('input[name="market"]:checked').val();
 }
 
-// Start scanning
+// Start scanning with batch support
 async function startScan() {
     const market = getSelectedMarket();
 
@@ -56,35 +56,68 @@ async function startScan() {
     $('#scan-text').text('Scanning...');
     $('#scan-spinner').removeClass('d-none');
     $('#status-bar').removeClass('d-none').addClass('alert-info').removeClass('alert-success alert-danger');
-    $('#status-text').text(`Scanning ${market.toUpperCase()}... This may take a few minutes.`);
+    $('#status-text').text(`Scanning ${market.toUpperCase()}...`);
+
+    // Clear previous results
+    currentResults = [];
+    dataTable.clear().draw();
+
+    const batchSize = 100;
+    let batch = 0;
+    let hasMore = true;
+    let totalScanned = 0;
+    let totalTickers = 0;
 
     try {
-        const response = await fetch('/api/scan', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                markets: [market],
-                min_drop: minDrop,
-                max_drop: maxDrop
-            })
-        });
+        // Fetch batches until no more
+        while (hasMore) {
+            const response = await fetch('/api/scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    markets: [market],
+                    min_drop: minDrop,
+                    max_drop: maxDrop,
+                    batch: batch,
+                    batch_size: batchSize
+                })
+            });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Update totals
+            totalTickers = data.total_tickers;
+            totalScanned += data.tickers_scanned;
+            hasMore = data.has_more;
+
+            // Add new stocks to results
+            if (data.stocks && data.stocks.length > 0) {
+                currentResults = currentResults.concat(data.stocks);
+                // Update table progressively
+                appendToResultsTable(data.stocks);
+            }
+
+            // Update progress
+            const progress = Math.min(100, Math.round((totalScanned / totalTickers) * 100));
+            $('#status-text').text(`Scanning ${market.toUpperCase()}... ${progress}% (${totalScanned}/${totalTickers} stocks)`);
+            $('#results-count').text(`${currentResults.length} stocks found`);
+
+            batch++;
         }
 
-        const data = await response.json();
-        currentResults = data.stocks || [];
-
-        // Update results
-        updateResultsTable(currentResults);
-
-        // Update status
+        // Final update
         $('#status-bar').removeClass('alert-info').addClass('alert-success');
-        $('#status-text').text(`Scan complete! Found ${data.count} stocks matching criteria. Scanned ${data.tickers_scanned} tickers.`);
-        $('#results-count').text(`${data.count} stocks found`);
+        $('#status-text').text(`Scan complete! Found ${currentResults.length} stocks matching criteria. Scanned ${totalTickers} tickers.`);
+        $('#results-count').text(`${currentResults.length} stocks found`);
+
+        // Load news analysis progressively
+        loadNewsProgressively(currentResults);
 
     } catch (error) {
         console.error('Scan error:', error);
@@ -98,7 +131,7 @@ async function startScan() {
     }
 }
 
-// Update results table
+// Update results table (full replace)
 function updateResultsTable(stocks) {
     // Clear existing data
     dataTable.clear();
@@ -121,6 +154,30 @@ function updateResultsTable(stocks) {
     // Load news analysis progressively in background
     loadNewsProgressively(stocks);
 
+    setupRowClickHandlers();
+}
+
+// Append stocks to table (for batch loading)
+function appendToResultsTable(stocks) {
+    // Add each stock as a row with loading indicator for safety
+    stocks.forEach(stock => {
+        dataTable.row.add([
+            formatTicker(stock.ticker),
+            truncateName(stock.name, 30),
+            stock.sector || 'N/A',
+            formatPrice(stock.current_price, stock.currency),
+            formatPrice(stock.high_52w, stock.currency),
+            formatDropPct(stock.drop_pct),
+            `<span class="safety-loading" data-ticker="${stock.ticker}"><span class="spinner-border spinner-border-sm"></span></span>`
+        ]);
+    });
+
+    dataTable.draw();
+    setupRowClickHandlers();
+}
+
+// Setup click handlers for table rows
+function setupRowClickHandlers() {
     // Add click handlers for rows
     $('#results-table tbody').off('click').on('click', 'tr', function() {
         const data = dataTable.row(this).data();

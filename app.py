@@ -44,14 +44,15 @@ def get_markets():
 @app.route('/api/scan', methods=['POST'])
 def scan_stocks():
     """
-    Scan stocks for price drops.
+    Scan stocks for price drops with batch support.
 
     Request body:
     {
         "markets": ["sp500", "nasdaq"],  // Market keys to scan
         "min_drop": 20,                   // Minimum drop percentage
         "max_drop": 30,                   // Maximum drop percentage
-        "analyze_news": true              // Whether to analyze news
+        "batch": 0,                       // Batch number (0-indexed)
+        "batch_size": 100                 // Stocks per batch
     }
     """
     data = request.get_json() or {}
@@ -60,13 +61,24 @@ def scan_stocks():
     market_keys = data.get('markets', ['sp500'])
     min_drop = float(data.get('min_drop', 20))
     max_drop = float(data.get('max_drop', 30))
+    batch = int(data.get('batch', 0))
+    batch_size = int(data.get('batch_size', 100))
 
     # Validate parameters
     if min_drop < 0 or max_drop > 100 or min_drop >= max_drop:
         return jsonify({"error": "Invalid drop range"}), 400
 
     # Get tickers for selected markets
-    tickers = get_tickers_by_markets(market_keys)
+    all_tickers = get_tickers_by_markets(market_keys)
+    total_tickers = len(all_tickers)
+
+    # Calculate batch slice
+    start_idx = batch * batch_size
+    end_idx = min(start_idx + batch_size, total_tickers)
+    tickers = all_tickers[start_idx:end_idx]
+
+    # Check if this is the last batch
+    has_more = end_idx < total_tickers
 
     if not tickers:
         return jsonify({"error": "No valid market selected"}), 400
@@ -88,7 +100,7 @@ def scan_stocks():
     # Sort by drop percentage (highest first)
     stocks.sort(key=lambda x: -x['drop_pct'])
 
-    # Prepare response
+    # Prepare response with batch metadata
     result = {
         "count": len(stocks),
         "markets_scanned": market_keys,
@@ -97,7 +109,12 @@ def scan_stocks():
             "min_drop": min_drop,
             "max_drop": max_drop
         },
-        "stocks": stocks
+        "stocks": stocks,
+        # Batch metadata for frontend
+        "batch": batch,
+        "batch_size": batch_size,
+        "total_tickers": total_tickers,
+        "has_more": has_more
     }
 
     return jsonify(result)
