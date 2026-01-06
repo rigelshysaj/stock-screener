@@ -91,7 +91,9 @@ def scan_stocks():
     if analyze_news and stocks:
         logger.info(f"Analyzing news for {len(stocks)} stocks...")
 
-        def analyze_with_news(stock):
+        # Process news analysis sequentially to avoid rate limiting
+        analyzed_stocks = []
+        for i, stock in enumerate(stocks):
             try:
                 is_safe, analysis = is_safe_drop(stock['ticker'], stock.get('name'))
                 stock['news_analysis'] = {
@@ -108,10 +110,14 @@ def scan_stocks():
                 logger.warning(f"Error analyzing news for {stock['ticker']}: {e}")
                 stock['news_analysis'] = None
                 stock['is_safe'] = None
-            return stock
 
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            stocks = list(executor.map(analyze_with_news, stocks))
+            analyzed_stocks.append(stock)
+
+            # Add small delay between news analyses to avoid rate limiting
+            if i < len(stocks) - 1:
+                time.sleep(0.5)
+
+        stocks = analyzed_stocks
 
     # Sort by safety score (safest first), then by drop percentage
     stocks.sort(key=lambda x: (

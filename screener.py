@@ -8,6 +8,7 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional
 import logging
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -72,17 +73,18 @@ def screen_stocks(
     min_drop: float = 20.0,
     max_drop: float = 30.0,
     exclude_sudden_drops: bool = True,
-    max_workers: int = 5
+    max_workers: int = 2
 ) -> List[Dict]:
     """
     Screen multiple stocks for price drops.
+    Processes in batches to avoid rate limiting.
 
     Args:
         tickers: List of ticker symbols
         min_drop: Minimum drop percentage (default 20%)
         max_drop: Maximum drop percentage (default 30%)
         exclude_sudden_drops: Exclude stocks with sudden drops (>10% in 5 days)
-        max_workers: Number of parallel threads
+        max_workers: Number of parallel threads (kept low to avoid rate limiting)
 
     Returns:
         List of stocks matching criteria
@@ -90,36 +92,46 @@ def screen_stocks(
     results = []
     total = len(tickers)
     processed = 0
+    batch_size = 20  # Process in smaller batches
+    delay_between_batches = 1.0  # Delay in seconds between batches
 
-    logger.info(f"Screening {total} stocks...")
+    logger.info(f"Screening {total} stocks in batches of {batch_size}...")
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(get_stock_data, ticker): ticker for ticker in tickers}
+    # Process in batches to avoid rate limiting
+    for batch_start in range(0, total, batch_size):
+        batch_end = min(batch_start + batch_size, total)
+        batch_tickers = tickers[batch_start:batch_end]
 
-        for future in as_completed(futures):
-            processed += 1
-            ticker = futures[future]
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(get_stock_data, ticker): ticker for ticker in batch_tickers}
 
-            try:
-                data = future.result()
+            for future in as_completed(futures):
+                processed += 1
+                ticker = futures[future]
 
-                if data is None:
-                    continue
+                try:
+                    data = future.result()
 
-                # Apply filters
-                if min_drop <= data["drop_pct"] <= max_drop:
-                    if exclude_sudden_drops and data["sudden_drop"]:
-                        logger.info(f"Excluding {ticker} - sudden drop detected")
+                    if data is None:
                         continue
 
-                    results.append(data)
-                    logger.info(f"Found: {ticker} - Drop: {data['drop_pct']}%")
+                    # Apply filters
+                    if min_drop <= data["drop_pct"] <= max_drop:
+                        if exclude_sudden_drops and data["sudden_drop"]:
+                            logger.info(f"Excluding {ticker} - sudden drop detected")
+                            continue
 
-            except Exception as e:
-                logger.warning(f"Error processing {ticker}: {e}")
+                        results.append(data)
+                        logger.info(f"Found: {ticker} - Drop: {data['drop_pct']}%")
 
-            if processed % 20 == 0:
-                logger.info(f"Progress: {processed}/{total}")
+                except Exception as e:
+                    logger.warning(f"Error processing {ticker}: {e}")
+
+        logger.info(f"Progress: {processed}/{total}")
+
+        # Add delay between batches to avoid rate limiting
+        if batch_end < total:
+            time.sleep(delay_between_batches)
 
     # Sort by drop percentage (highest drop first)
     results.sort(key=lambda x: x["drop_pct"], reverse=True)
