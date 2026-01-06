@@ -28,10 +28,23 @@ function initDataTable() {
     });
 }
 
-// Get selected market
+// Get selected markets (multiple checkboxes)
 function getSelectedMarkets() {
-    const selected = $('input[name="market"]:checked').val();
-    return selected ? [selected] : [];
+    const selected = [];
+    $('.market-checkbox:checked').each(function() {
+        selected.push($(this).val());
+    });
+    return selected;
+}
+
+// Select all markets
+function selectAllMarkets() {
+    $('.market-checkbox').prop('checked', true);
+}
+
+// Deselect all markets
+function deselectAllMarkets() {
+    $('.market-checkbox').prop('checked', false);
 }
 
 // Start scanning
@@ -39,7 +52,7 @@ async function startScan() {
     const markets = getSelectedMarkets();
 
     if (markets.length === 0) {
-        alert('Please select a market to scan.');
+        alert('Please select at least one market to scan.');
         return;
     }
 
@@ -57,7 +70,8 @@ async function startScan() {
     $('#scan-text').text('Scanning...');
     $('#scan-spinner').removeClass('d-none');
     $('#status-bar').removeClass('d-none').addClass('alert-info').removeClass('alert-success alert-danger');
-    $('#status-text').text(`Scanning ${markets[0].toUpperCase()}... This may take a few minutes.`);
+    const marketNames = markets.map(m => m.toUpperCase()).join(', ');
+    $('#status-text').text(`Scanning ${marketNames}... This may take a few minutes.`);
 
     try {
         const response = await fetch('/api/scan', {

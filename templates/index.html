@@ -30,12 +30,12 @@
                 <div class="row">
                     <!-- Markets Selection -->
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Select Market</label>
+                        <label class="form-label fw-bold">Select Markets</label>
                         <div class="markets-grid" id="markets-container">
                             {% for key, market in markets.items() %}
                             <div class="form-check">
-                                <input class="form-check-input market-radio" type="radio"
-                                       name="market" value="{{ key }}" id="market-{{ key }}"
+                                <input class="form-check-input market-checkbox" type="checkbox"
+                                       value="{{ key }}" id="market-{{ key }}"
                                        {% if key == 'sp500' %}checked{% endif %}>
                                 <label class="form-check-label" for="market-{{ key }}">
                                     {{ market.name }}
@@ -43,6 +43,10 @@
                                 </label>
                             </div>
                             {% endfor %}
+                        </div>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllMarkets()">Select All</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllMarkets()">Clear All</button>
                         </div>
                     </div>
 
