@@ -19,11 +19,11 @@ function initDataTable() {
         pageLength: 25,
         order: [[5, 'desc']], // Sort by drop % descending
         language: {
-            emptyTable: "Select markets and click 'Start Scan' to find opportunities"
+            emptyTable: "Select a market and click 'Start Scan' to find opportunities"
         },
         columnDefs: [
             { targets: [3, 4], className: 'text-end' },
-            { targets: [5, 6], className: 'text-center' }
+            { targets: [5], className: 'text-center' }
         ]
     });
 }
@@ -45,7 +45,6 @@ async function startScan() {
 
     const minDrop = parseFloat($('#min-drop').val()) || 20;
     const maxDrop = parseFloat($('#max-drop').val()) || 30;
-    const analyzeNews = $('#analyze-news').is(':checked');
 
     // Validate range
     if (minDrop >= maxDrop) {
@@ -69,8 +68,7 @@ async function startScan() {
             body: JSON.stringify({
                 markets: markets,
                 min_drop: minDrop,
-                max_drop: maxDrop,
-                analyze_news: analyzeNews
+                max_drop: maxDrop
             })
         });
 
@@ -108,19 +106,13 @@ function updateResultsTable(stocks) {
 
     // Add each stock as a row
     stocks.forEach(stock => {
-        const newsAnalysis = stock.news_analysis || {};
-        const safetyScore = newsAnalysis.safety_score ?? '-';
-        const assessment = newsAnalysis.assessment || 'unknown';
-
         dataTable.row.add([
             formatTicker(stock.ticker),
             truncateName(stock.name, 30),
             stock.sector || 'N/A',
             formatPrice(stock.current_price, stock.currency),
             formatPrice(stock.high_52w, stock.currency),
-            formatDropPct(stock.drop_pct),
-            formatSafetyScore(safetyScore),
-            formatAssessment(assessment, newsAnalysis.message)
+            formatDropPct(stock.drop_pct)
         ]);
     });
 

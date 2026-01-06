@@ -64,13 +64,6 @@
                             </div>
                         </div>
 
-                        <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" id="analyze-news" checked>
-                            <label class="form-check-label" for="analyze-news">
-                                Analyze News Sentiment (recommended, but slower for large scans)
-                            </label>
-                        </div>
-
                         <button class="btn btn-primary btn-lg w-100" id="scan-btn" onclick="startScan()">
                             <span id="scan-text">Start Scan</span>
                             <span id="scan-spinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
@@ -102,8 +95,6 @@
                                 <th>Current</th>
                                 <th>52W High</th>
                                 <th>Drop %</th>
-                                <th>Safety</th>
-                                <th>Assessment</th>
                             </tr>
                         </thead>
                         <tbody id="results-body">
@@ -132,15 +123,12 @@
         </div>
     </div>
 
-    <!-- Legend -->
+    <!-- Info -->
     <div class="container mt-3 mb-5">
         <div class="card bg-light">
             <div class="card-body">
-                <h6 class="mb-2">Safety Assessment Legend:</h6>
-                <span class="badge bg-success me-2">Safe</span> No critical issues, consider buying
-                <span class="badge bg-warning text-dark ms-3 me-2">Caution</span> Some concerns, research more
-                <span class="badge bg-danger ms-3 me-2">Avoid</span> Critical issues detected
-                <span class="badge bg-secondary ms-3 me-2">Unknown</span> No news data available
+                <h6 class="mb-2">How to use:</h6>
+                <p class="mb-0">Click on any stock row to see detailed information including <strong>news analysis</strong> and <strong>safety assessment</strong>.</p>
             </div>
         </div>
     </div>

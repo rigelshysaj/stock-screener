@@ -8,7 +8,6 @@ from screener import screen_stocks, get_stock_details
 from news_analyzer import analyze_stock_news, is_safe_drop
 from stock_lists import MARKETS, get_tickers_by_markets
 import logging
-from concurrent.futures import ThreadPoolExecutor
 import time
 
 # Configure logging
@@ -61,7 +60,6 @@ def scan_stocks():
     market_keys = data.get('markets', ['sp500'])
     min_drop = float(data.get('min_drop', 20))
     max_drop = float(data.get('max_drop', 30))
-    analyze_news = data.get('analyze_news', True)
 
     # Validate parameters
     if min_drop < 0 or max_drop > 100 or min_drop >= max_drop:
@@ -87,37 +85,8 @@ def scan_stocks():
         logger.error(f"Error screening stocks: {e}")
         return jsonify({"error": "Failed to screen stocks"}), 500
 
-    # Analyze news for each stock if requested
-    if analyze_news and stocks:
-        logger.info(f"Analyzing news for {len(stocks)} stocks...")
-
-        def analyze_with_news(stock):
-            try:
-                is_safe, analysis = is_safe_drop(stock['ticker'], stock.get('name'))
-                stock['news_analysis'] = {
-                    'safety_score': analysis['safety_score'],
-                    'assessment': analysis['assessment'],
-                    'message': analysis['message'],
-                    'overall_sentiment': analysis['overall_sentiment'],
-                    'critical_issues': analysis['critical_issues'],
-                    'critical_keywords': analysis.get('critical_keywords_found', []),
-                    'news_count': len(analysis.get('news', []))
-                }
-                stock['is_safe'] = is_safe
-            except Exception as e:
-                logger.warning(f"Error analyzing news for {stock['ticker']}: {e}")
-                stock['news_analysis'] = None
-                stock['is_safe'] = None
-            return stock
-
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            stocks = list(executor.map(analyze_with_news, stocks))
-
-    # Sort by safety score (safest first), then by drop percentage
-    stocks.sort(key=lambda x: (
-        -(x.get('news_analysis', {}).get('safety_score', 0) if x.get('news_analysis') else 0),
-        -x['drop_pct']
-    ))
+    # Sort by drop percentage (highest first)
+    stocks.sort(key=lambda x: -x['drop_pct'])
 
     # Prepare response
     result = {
@@ -126,8 +95,7 @@ def scan_stocks():
         "tickers_scanned": len(tickers),
         "parameters": {
             "min_drop": min_drop,
-            "max_drop": max_drop,
-            "analyze_news": analyze_news
+            "max_drop": max_drop
         },
         "stocks": stocks
     }
