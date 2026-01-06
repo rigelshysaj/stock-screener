@@ -71,13 +71,7 @@ def scan_stocks():
     tickers = get_tickers_by_markets(market_keys)
 
     if not tickers:
-        return jsonify({"error": "No valid markets selected"}), 400
-
-    # Limit stocks to avoid timeout on free hosting (30s request limit)
-    MAX_STOCKS = 150
-    if len(tickers) > MAX_STOCKS:
-        logger.warning(f"Limiting scan from {len(tickers)} to {MAX_STOCKS} stocks")
-        tickers = tickers[:MAX_STOCKS]
+        return jsonify({"error": "No valid market selected"}), 400
 
     logger.info(f"Scanning {len(tickers)} stocks from markets: {market_keys}")
 
@@ -97,9 +91,7 @@ def scan_stocks():
     if analyze_news and stocks:
         logger.info(f"Analyzing news for {len(stocks)} stocks...")
 
-        # Process news analysis sequentially to avoid rate limiting
-        analyzed_stocks = []
-        for i, stock in enumerate(stocks):
+        def analyze_with_news(stock):
             try:
                 is_safe, analysis = is_safe_drop(stock['ticker'], stock.get('name'))
                 stock['news_analysis'] = {
@@ -116,14 +108,10 @@ def scan_stocks():
                 logger.warning(f"Error analyzing news for {stock['ticker']}: {e}")
                 stock['news_analysis'] = None
                 stock['is_safe'] = None
+            return stock
 
-            analyzed_stocks.append(stock)
-
-            # Add small delay between news analyses to avoid rate limiting
-            if i < len(stocks) - 1:
-                time.sleep(0.5)
-
-        stocks = analyzed_stocks
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            stocks = list(executor.map(analyze_with_news, stocks))
 
     # Sort by safety score (safest first), then by drop percentage
     stocks.sort(key=lambda x: (
@@ -132,16 +120,10 @@ def scan_stocks():
     ))
 
     # Prepare response
-    original_count = len(get_tickers_by_markets(market_keys))
-    was_limited = original_count > MAX_STOCKS
-
     result = {
         "count": len(stocks),
         "markets_scanned": market_keys,
         "tickers_scanned": len(tickers),
-        "tickers_total": original_count,
-        "was_limited": was_limited,
-        "max_stocks": MAX_STOCKS,
         "parameters": {
             "min_drop": min_drop,
             "max_drop": max_drop,

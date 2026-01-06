@@ -28,20 +28,10 @@ function initDataTable() {
     });
 }
 
-// Select/Deselect all markets
-function selectAllMarkets() {
-    $('.market-checkbox').prop('checked', true);
-}
-
-function deselectAllMarkets() {
-    $('.market-checkbox').prop('checked', false);
-}
-
-// Get selected markets
+// Get selected market
 function getSelectedMarkets() {
-    return $('.market-checkbox:checked').map(function() {
-        return $(this).val();
-    }).get();
+    const selected = $('input[name="market"]:checked').val();
+    return selected ? [selected] : [];
 }
 
 // Start scanning
@@ -49,7 +39,7 @@ async function startScan() {
     const markets = getSelectedMarkets();
 
     if (markets.length === 0) {
-        alert('Please select at least one market to scan.');
+        alert('Please select a market to scan.');
         return;
     }
 
@@ -68,7 +58,7 @@ async function startScan() {
     $('#scan-text').text('Scanning...');
     $('#scan-spinner').removeClass('d-none');
     $('#status-bar').removeClass('d-none').addClass('alert-info').removeClass('alert-success alert-danger');
-    $('#status-text').text(`Scanning ${markets.length} market(s)... This may take a few minutes.`);
+    $('#status-text').text(`Scanning ${markets[0].toUpperCase()}... This may take a few minutes.`);
 
     try {
         const response = await fetch('/api/scan', {
@@ -96,12 +86,7 @@ async function startScan() {
 
         // Update status
         $('#status-bar').removeClass('alert-info').addClass('alert-success');
-        let statusMsg = `Scan complete! Found ${data.count} stocks matching criteria. Scanned ${data.tickers_scanned} tickers.`;
-        if (data.was_limited) {
-            statusMsg += ` (Limited from ${data.tickers_total} to ${data.max_stocks} stocks due to server constraints)`;
-            $('#status-bar').removeClass('alert-success').addClass('alert-warning');
-        }
-        $('#status-text').text(statusMsg);
+        $('#status-text').text(`Scan complete! Found ${data.count} stocks matching criteria. Scanned ${data.tickers_scanned} tickers.`);
         $('#results-count').text(`${data.count} stocks found`);
 
     } catch (error) {
