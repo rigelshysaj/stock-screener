@@ -23,7 +23,7 @@ function initDataTable() {
         },
         columnDefs: [
             { targets: [3, 4], className: 'text-end' },
-            { targets: [5], className: 'text-center' }
+            { targets: [5, 6], className: 'text-center' }
         ]
     });
 }
@@ -104,7 +104,7 @@ function updateResultsTable(stocks) {
     // Clear existing data
     dataTable.clear();
 
-    // Add each stock as a row
+    // Add each stock as a row with loading indicator for safety
     stocks.forEach(stock => {
         dataTable.row.add([
             formatTicker(stock.ticker),
@@ -112,11 +112,15 @@ function updateResultsTable(stocks) {
             stock.sector || 'N/A',
             formatPrice(stock.current_price, stock.currency),
             formatPrice(stock.high_52w, stock.currency),
-            formatDropPct(stock.drop_pct)
+            formatDropPct(stock.drop_pct),
+            `<span class="safety-loading" data-ticker="${stock.ticker}"><span class="spinner-border spinner-border-sm"></span></span>`
         ]);
     });
 
     dataTable.draw();
+
+    // Load news analysis progressively in background
+    loadNewsProgressively(stocks);
 
     // Add click handlers for rows
     $('#results-table tbody').off('click').on('click', 'tr', function() {
@@ -348,4 +352,46 @@ function renderStockDetails(stock) {
             ${stock.description ? `<p class="text-muted small">${stock.description.substring(0, 300)}...</p>` : ''}
         </div>
     `;
+}
+
+// Load news analysis progressively for each stock
+async function loadNewsProgressively(stocks) {
+    for (const stock of stocks) {
+        try {
+            const response = await fetch(`/api/stock/${stock.ticker}/news`);
+            if (response.ok) {
+                const analysis = await response.json();
+                updateSafetyCell(stock.ticker, analysis);
+            } else {
+                updateSafetyCell(stock.ticker, null);
+            }
+        } catch (error) {
+            console.warn(`Error loading news for ${stock.ticker}:`, error);
+            updateSafetyCell(stock.ticker, null);
+        }
+    }
+}
+
+// Update safety cell for a specific ticker
+function updateSafetyCell(ticker, analysis) {
+    const cell = $(`.safety-loading[data-ticker="${ticker}"]`);
+    if (cell.length) {
+        if (analysis && analysis.safety_score !== undefined) {
+            const score = analysis.safety_score;
+            const assessment = analysis.assessment || 'unknown';
+            cell.replaceWith(formatSafetyBadge(score, assessment, analysis.message));
+        } else {
+            cell.replaceWith('<span class="badge bg-secondary">?</span>');
+        }
+    }
+}
+
+// Format safety badge with score and assessment
+function formatSafetyBadge(score, assessment, message) {
+    const icons = { 'safe': '✓', 'caution': '⚠', 'avoid': '✗', 'unknown': '?' };
+    const colors = { 'safe': 'success', 'caution': 'warning', 'avoid': 'danger', 'unknown': 'secondary' };
+    const icon = icons[assessment] || '?';
+    const color = colors[assessment] || 'secondary';
+    const title = message || '';
+    return `<span class="badge bg-${color}" title="${title}" style="cursor:help">${icon} ${score}</span>`;
 }
