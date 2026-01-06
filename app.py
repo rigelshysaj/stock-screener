@@ -73,6 +73,12 @@ def scan_stocks():
     if not tickers:
         return jsonify({"error": "No valid markets selected"}), 400
 
+    # Limit stocks to avoid timeout on free hosting (30s request limit)
+    MAX_STOCKS = 150
+    if len(tickers) > MAX_STOCKS:
+        logger.warning(f"Limiting scan from {len(tickers)} to {MAX_STOCKS} stocks")
+        tickers = tickers[:MAX_STOCKS]
+
     logger.info(f"Scanning {len(tickers)} stocks from markets: {market_keys}")
 
     # Screen stocks for price drops
@@ -126,10 +132,16 @@ def scan_stocks():
     ))
 
     # Prepare response
+    original_count = len(get_tickers_by_markets(market_keys))
+    was_limited = original_count > MAX_STOCKS
+
     result = {
         "count": len(stocks),
         "markets_scanned": market_keys,
         "tickers_scanned": len(tickers),
+        "tickers_total": original_count,
+        "was_limited": was_limited,
+        "max_stocks": MAX_STOCKS,
         "parameters": {
             "min_drop": min_drop,
             "max_drop": max_drop,

@@ -96,7 +96,12 @@ async function startScan() {
 
         // Update status
         $('#status-bar').removeClass('alert-info').addClass('alert-success');
-        $('#status-text').text(`Scan complete! Found ${data.count} stocks matching criteria. Scanned ${data.tickers_scanned} tickers.`);
+        let statusMsg = `Scan complete! Found ${data.count} stocks matching criteria. Scanned ${data.tickers_scanned} tickers.`;
+        if (data.was_limited) {
+            statusMsg += ` (Limited from ${data.tickers_total} to ${data.max_stocks} stocks due to server constraints)`;
+            $('#status-bar').removeClass('alert-success').addClass('alert-warning');
+        }
+        $('#status-text').text(statusMsg);
         $('#results-count').text(`${data.count} stocks found`);
 
     } catch (error) {
