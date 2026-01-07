@@ -50,7 +50,7 @@ def _infer_currency(ticker: str) -> str:
 
 def _normalize_provider(provider: Optional[str]) -> str:
     if not provider:
-        provider = os.getenv(PRICE_PROVIDER_ENV, "auto")
+        provider = os.getenv(PRICE_PROVIDER_ENV, "stooq")
     provider = provider.strip().lower()
     if provider not in SUPPORTED_PRICE_PROVIDERS:
         logger.warning(f"Unknown price provider '{provider}', falling back to auto.")
@@ -263,7 +263,7 @@ def get_stock_data(
     lookback_days: int = 2,
     hist: Optional[pd.DataFrame] = None,
     info: Optional[Dict] = None,
-    include_info: bool = True
+    include_info: bool = False
 ) -> Optional[Dict]:
     """
     Fetch stock data for a single ticker.
@@ -274,7 +274,7 @@ def get_stock_data(
         lookback_days: Number of days to look back (1 or 2)
         hist: Optional pre-fetched price history (10d)
         info: Optional pre-fetched stock info
-        include_info: Whether to fetch info if not provided
+        include_info: Whether to fetch Yahoo metadata
 
     Returns dict with price info or None if failed.
     """
@@ -293,15 +293,11 @@ def get_stock_data(
 
         current_price, reference_high, drop_pct = drop_data
 
-        if include_info:
-            if info is None:
-                if stock is None:
-                    stock = yf.Ticker(ticker)
-                info = _safe_get_info(stock, ticker)
-        else:
-            info = info or {}
-
         info = info or {}
+        if include_info and not info:
+            if stock is None:
+                stock = yf.Ticker(ticker)
+            info = _safe_get_info(stock, ticker)
 
         high_52w = info.get("fiftyTwoWeekHigh")
         low_52w = info.get("fiftyTwoWeekLow")
@@ -333,8 +329,6 @@ def get_stock_data(
     except Exception as e:
         logger.warning(f"Error fetching data for {ticker}: {e}")
         return None
-
-
 def _screen_with_stooq(
     tickers: List[str],
     min_drop: float,
@@ -444,7 +438,7 @@ def screen_stocks(
     lookback_days: int = 2,
     max_workers: int = 5,
     batch_size: int = 100,
-    include_info: bool = True,
+    include_info: bool = False,
     price_provider: Optional[str] = None
 ) -> List[Dict]:
     """
@@ -457,7 +451,7 @@ def screen_stocks(
         lookback_days: Number of days to look back (1 or 2)
         max_workers: Deprecated, kept for backward compatibility
         batch_size: Number of tickers per price-history request
-        include_info: Whether to fetch metadata for matched tickers
+        include_info: Whether to fetch Yahoo metadata for matched tickers
         price_provider: auto, yfinance, stooq, or alphavantage
 
     Returns:
