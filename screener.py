@@ -579,16 +579,23 @@ def screen_stocks(
     return results
 
 
-def get_stock_details(ticker: str, price_provider: Optional[str] = None) -> Optional[Dict]:
+def get_stock_details(
+    ticker: str,
+    price_provider: Optional[str] = None,
+    include_info: bool = False
+) -> Optional[Dict]:
     """
     Get detailed information for a single stock.
 
     Args:
         price_provider: auto, yfinance, stooq, or alphavantage
+        include_info: Whether to fetch Yahoo metadata
     """
     try:
-        stock = yf.Ticker(ticker)
-        info = _safe_get_info(stock, ticker)
+        info = {}
+        if include_info:
+            stock = yf.Ticker(ticker)
+            info = _safe_get_info(stock, ticker)
         hist = _fetch_history(ticker, "1y", price_provider)
 
         if hist is None or hist.empty:
