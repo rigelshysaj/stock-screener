@@ -51,6 +51,17 @@ MODERATE_KEYWORDS = [
     "restructuring", "cost cutting", "margin pressure"
 ]
 
+PRICE_MOVE_TERMS = [
+    "stock", "stocks", "share", "shares", "price", "prices", "equity"
+]
+
+PRICE_MOVE_VERBS = [
+    "down", "lower", "fall", "fell", "falls", "drop", "dropped", "drops", "decline",
+    "declined", "slump", "slumped", "plunge", "plunged", "tumble", "tumbled",
+    "sink", "sank", "slide", "slid", "plummet", "plummeted", "crash", "crashed",
+    "tank", "tanked", "selloff", "sell-off"
+]
+
 
 def fetch_news_google(query: str, num_results: int = 10) -> List[Dict]:
     """
@@ -121,6 +132,22 @@ def analyze_sentiment(text: str) -> Dict:
         "subjectivity": round(subjectivity, 3),
         "interpretation": interpretation
     }
+
+
+def is_price_move_only(text: str) -> bool:
+    """
+    Detect news that only mentions price movement with no other negative signals.
+    """
+    text_lower = text.lower()
+
+    if not any(term in text_lower for term in PRICE_MOVE_TERMS):
+        return False
+    if not any(verb in text_lower for verb in PRICE_MOVE_VERBS):
+        return False
+
+    has_critical, _ = check_critical_keywords(text_lower)
+    has_moderate, _ = check_moderate_keywords(text_lower)
+    return not (has_critical or has_moderate)
 
 
 def check_critical_keywords(text: str) -> Tuple[bool, List[str]]:
@@ -200,6 +227,7 @@ def analyze_stock_news(ticker: str, company_name: str = None) -> Dict:
         sentiment = analyze_sentiment(text)
         has_critical, critical_kw = check_critical_keywords(text)
         has_moderate, moderate_kw = check_moderate_keywords(text)
+        price_move_only = is_price_move_only(text)
 
         analyzed_news.append({
             **item,
@@ -207,7 +235,8 @@ def analyze_stock_news(ticker: str, company_name: str = None) -> Dict:
             "has_critical_keywords": has_critical,
             "critical_keywords": critical_kw,
             "has_moderate_keywords": has_moderate,
-            "moderate_keywords": moderate_kw
+            "moderate_keywords": moderate_kw,
+            "price_move_only": price_move_only
         })
 
     # Overall assessment
@@ -225,8 +254,15 @@ def analyze_stock_news(ticker: str, company_name: str = None) -> Dict:
         }
 
     # Calculate overall sentiment
-    sentiments = [n["sentiment"]["polarity"] for n in analyzed_news]
-    overall_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0
+    effective_sentiments = [
+        n["sentiment"]["polarity"]
+        for n in analyzed_news
+        if not n.get("price_move_only")
+    ]
+    overall_sentiment = (
+        sum(effective_sentiments) / len(effective_sentiments)
+        if effective_sentiments else 0
+    )
 
     # Check for any critical keywords across all news
     all_critical = []
@@ -255,10 +291,19 @@ def analyze_stock_news(ticker: str, company_name: str = None) -> Dict:
 
     safety_score = max(0, min(100, safety_score))
 
+    has_non_price_negative = any(
+        n["sentiment"]["polarity"] < -0.1 and not n.get("price_move_only")
+        for n in analyzed_news
+    )
+
     # Assessment
     if all_critical:
         assessment = "avoid"
         message = f"Critical issues detected: {', '.join(all_critical[:3])}"
+    elif has_non_price_negative:
+        assessment = "caution"
+        message = "Negative news detected beyond price movement"
+        safety_score = min(safety_score, 59)
     elif safety_score >= 60:
         assessment = "safe"
         if all_moderate:
