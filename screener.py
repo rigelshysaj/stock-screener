@@ -53,11 +53,12 @@ def _infer_currency(ticker: str) -> str:
 
 def _normalize_provider(provider: Optional[str]) -> str:
     if not provider:
-        provider = os.getenv(PRICE_PROVIDER_ENV, "stooq")
+        # Default to yfinance with batch download (most reliable, avoids rate limits)
+        provider = os.getenv(PRICE_PROVIDER_ENV, "yfinance")
     provider = provider.strip().lower()
     if provider not in SUPPORTED_PRICE_PROVIDERS:
-        logger.warning(f"Unknown price provider '{provider}', falling back to auto.")
-        return "auto"
+        logger.warning(f"Unknown price provider '{provider}', falling back to yfinance.")
+        return "yfinance"
     return provider
 
 

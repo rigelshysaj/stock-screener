@@ -122,25 +122,17 @@ def scan_stocks():
     min_drop = float(data.get('min_drop', 20))
     max_drop = float(data.get('max_drop', 30))
     lookback_days = int(data.get('lookback_days', 2))
+    # Default to yfinance - uses efficient batch downloading, avoids rate limits
     price_provider = data.get('price_provider')
     if price_provider is None:
-        price_provider = os.getenv('PRICE_PROVIDER', 'stooq')
+        price_provider = os.getenv('PRICE_PROVIDER', 'yfinance')
     price_provider = str(price_provider).strip().lower()
-    if price_provider in ("", "auto", "yfinance"):
-        price_provider = "stooq"
+    if price_provider == "":
+        price_provider = "yfinance"
     include_info = _parse_bool(os.getenv('INCLUDE_INFO'), False)
     batch = int(data.get('batch', 0))
-    requested_batch_size = int(data.get('batch_size', 100))
-    batch_size = requested_batch_size
-    max_batch_size = _parse_int(os.getenv('MAX_BATCH_SIZE'), 20)
-    if max_batch_size < 1:
-        max_batch_size = 20
-    if batch_size < 1:
-        batch_size = 1
-    if batch_size > max_batch_size:
-        batch_size = max_batch_size
-    if batch_size != requested_batch_size:
-        logger.info(f"Clamped batch_size to {batch_size} (requested {requested_batch_size})")
+    # yfinance batch download is efficient - allow larger batches
+    batch_size = min(int(data.get('batch_size', 200)), 500)
 
     # Validate parameters
     if min_drop < 0 or max_drop > 100 or min_drop >= max_drop:
@@ -223,12 +215,13 @@ def scan_stocks():
 def get_stock(ticker):
     """Get detailed information for a specific stock."""
     try:
+        # Default to yfinance for stock details
         price_provider = request.args.get('price_provider')
         if price_provider is None:
-            price_provider = os.getenv('PRICE_PROVIDER', 'stooq')
+            price_provider = os.getenv('PRICE_PROVIDER', 'yfinance')
         price_provider = str(price_provider).strip().lower()
-        if price_provider in ("", "auto", "yfinance"):
-            price_provider = "stooq"
+        if price_provider == "":
+            price_provider = "yfinance"
         include_info = _parse_bool(os.getenv('INCLUDE_INFO'), False)
 
         cache_key = (ticker.upper(), price_provider, include_info)

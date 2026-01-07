@@ -78,7 +78,7 @@ async function startScan() {
     dataTable.clear().draw();
     $('#results-count').text('Scanning...');
 
-    const batchSize = 100;
+    const batchSize = 200; // Larger batches - yfinance batch download is efficient
     let batch = 0;
     let hasMore = true;
     let totalScanned = 0;
