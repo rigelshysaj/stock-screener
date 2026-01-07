@@ -131,8 +131,13 @@ def scan_stocks():
         price_provider = "yfinance"
     include_info = _parse_bool(os.getenv('INCLUDE_INFO'), False)
     batch = int(data.get('batch', 0))
-    # yfinance batch download is efficient - allow larger batches
-    batch_size = min(int(data.get('batch_size', 200)), 500)
+
+    # Respect MAX_BATCH_SIZE from environment (Render has resource limits)
+    requested_batch_size = int(data.get('batch_size', 100))
+    max_batch_size = _parse_int(os.getenv('MAX_BATCH_SIZE'), 100)
+    batch_size = min(requested_batch_size, max_batch_size)
+    if batch_size != requested_batch_size:
+        logger.info(f"Clamped batch_size to {batch_size} (requested {requested_batch_size})")
 
     # Validate parameters
     if min_drop < 0 or max_drop > 100 or min_drop >= max_drop:
