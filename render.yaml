@@ -11,3 +11,11 @@ services:
         value: "stooq"
       - key: INCLUDE_INFO
         value: "false"
+      - key: MAX_BATCH_SIZE
+        value: "20"
+      - key: STOOQ_MAX_WORKERS
+        value: "3"
+      - key: STOOQ_CONNECT_TIMEOUT
+        value: "4"
+      - key: STOOQ_READ_TIMEOUT
+        value: "6"

@@ -44,6 +44,13 @@ def _parse_bool(value, default=False):
     return default
 
 
+def _parse_int(value, default):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _cache_get(cache, key):
     entry = cache.get(key)
     if not entry:
@@ -123,7 +130,17 @@ def scan_stocks():
         price_provider = "stooq"
     include_info = _parse_bool(os.getenv('INCLUDE_INFO'), False)
     batch = int(data.get('batch', 0))
-    batch_size = int(data.get('batch_size', 100))
+    requested_batch_size = int(data.get('batch_size', 100))
+    batch_size = requested_batch_size
+    max_batch_size = _parse_int(os.getenv('MAX_BATCH_SIZE'), 20)
+    if max_batch_size < 1:
+        max_batch_size = 20
+    if batch_size < 1:
+        batch_size = 1
+    if batch_size > max_batch_size:
+        batch_size = max_batch_size
+    if batch_size != requested_batch_size:
+        logger.info(f"Clamped batch_size to {batch_size} (requested {requested_batch_size})")
 
     # Validate parameters
     if min_drop < 0 or max_drop > 100 or min_drop >= max_drop:

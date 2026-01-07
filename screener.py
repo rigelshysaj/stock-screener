@@ -40,6 +40,9 @@ SUPPORTED_PRICE_PROVIDERS = {"auto", "yfinance", "stooq", "alphavantage"}
 PRICE_PROVIDER_ENV = "PRICE_PROVIDER"
 ALPHAVANTAGE_API_KEY_ENV = "ALPHAVANTAGE_API_KEY"
 ALPHAVANTAGE_MIN_SECONDS_ENV = "ALPHAVANTAGE_MIN_SECONDS"
+STOOQ_CONNECT_TIMEOUT_ENV = "STOOQ_CONNECT_TIMEOUT"
+STOOQ_READ_TIMEOUT_ENV = "STOOQ_READ_TIMEOUT"
+STOOQ_MAX_WORKERS_ENV = "STOOQ_MAX_WORKERS"
 
 def _infer_currency(ticker: str) -> str:
     for suffix, currency in SUFFIX_CURRENCY.items():
@@ -56,6 +59,22 @@ def _normalize_provider(provider: Optional[str]) -> str:
         logger.warning(f"Unknown price provider '{provider}', falling back to auto.")
         return "auto"
     return provider
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        value = float(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
 
 
 def _period_to_rows(period: str) -> int:
@@ -88,9 +107,11 @@ def _fetch_stooq_history(ticker: str, period: str) -> Optional[pd.DataFrame]:
     if not symbol:
         return None
 
+    connect_timeout = _env_float(STOOQ_CONNECT_TIMEOUT_ENV, 4.0)
+    read_timeout = _env_float(STOOQ_READ_TIMEOUT_ENV, 6.0)
     url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=(connect_timeout, read_timeout))
     except requests.RequestException as e:
         logger.warning(f"Error fetching Stooq data for {ticker}: {e}")
         return None
@@ -342,6 +363,9 @@ def _screen_with_stooq(
 
     if total == 0:
         return results
+
+    stooq_max_workers = _env_int(STOOQ_MAX_WORKERS_ENV, 3)
+    max_workers = max(1, min(max_workers, stooq_max_workers))
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
