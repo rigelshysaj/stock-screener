@@ -19,3 +19,11 @@ services:
         value: "4"
       - key: STOOQ_READ_TIMEOUT
         value: "6"
+      - key: BAD_TICKERS_ENABLED
+        value: "true"
+      - key: BAD_TICKERS_TTL_DAYS
+        value: "30"
+      - key: BAD_TICKERS_FILE
+        value: "/tmp/bad_tickers.json"
+      - key: YFINANCE_LOG_LEVEL
+        value: "CRITICAL"

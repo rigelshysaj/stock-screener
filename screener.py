@@ -4,6 +4,7 @@ Identifies stocks that have dropped 20-30% in the last 1-2 days.
 """
 
 import io
+import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -43,6 +44,22 @@ ALPHAVANTAGE_MIN_SECONDS_ENV = "ALPHAVANTAGE_MIN_SECONDS"
 STOOQ_CONNECT_TIMEOUT_ENV = "STOOQ_CONNECT_TIMEOUT"
 STOOQ_READ_TIMEOUT_ENV = "STOOQ_READ_TIMEOUT"
 STOOQ_MAX_WORKERS_ENV = "STOOQ_MAX_WORKERS"
+BAD_TICKERS_FILE_ENV = "BAD_TICKERS_FILE"
+BAD_TICKERS_TTL_DAYS_ENV = "BAD_TICKERS_TTL_DAYS"
+BAD_TICKERS_ENABLED_ENV = "BAD_TICKERS_ENABLED"
+YFINANCE_LOG_LEVEL_ENV = "YFINANCE_LOG_LEVEL"
+
+_BAD_TICKERS = None
+_BAD_TICKERS_DIRTY = False
+
+
+def _configure_yfinance_logging() -> None:
+    level_name = os.getenv(YFINANCE_LOG_LEVEL_ENV, "ERROR").strip().upper()
+    level = getattr(logging, level_name, logging.ERROR)
+    logging.getLogger("yfinance").setLevel(level)
+
+
+_configure_yfinance_logging()
 
 def _infer_currency(ticker: str) -> str:
     for suffix, currency in SUFFIX_CURRENCY.items():
@@ -78,6 +95,18 @@ def _env_float(name: str, default: float) -> float:
     return value if value > 0 else default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip().lower()
+    if value in ("1", "true", "yes", "y", "on"):
+        return True
+    if value in ("0", "false", "no", "n", "off"):
+        return False
+    return default
+
+
 def _period_to_rows(period: str) -> int:
     period = (period or "").strip().lower()
     try:
@@ -90,6 +119,99 @@ def _period_to_rows(period: str) -> int:
     except ValueError:
         return 0
     return 0
+
+
+def _bad_tickers_path() -> str:
+    path = os.getenv(BAD_TICKERS_FILE_ENV)
+    if path:
+        return path
+    return os.path.join(os.path.dirname(__file__), "data", "bad_tickers.json")
+
+
+def _prune_bad_tickers(bad: Dict[str, float]) -> Dict[str, float]:
+    ttl_days = _env_int(BAD_TICKERS_TTL_DAYS_ENV, 30)
+    if ttl_days <= 0:
+        return bad
+    cutoff = time.time() - (ttl_days * 86400)
+    return {ticker: ts for ticker, ts in bad.items() if ts >= cutoff}
+
+
+def _load_bad_tickers() -> Dict[str, float]:
+    global _BAD_TICKERS, _BAD_TICKERS_DIRTY
+    if _BAD_TICKERS is not None:
+        return _BAD_TICKERS
+
+    path = _bad_tickers_path()
+    data: Dict[str, float] = {}
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+        if isinstance(raw, dict):
+            for ticker, ts in raw.items():
+                try:
+                    data[str(ticker).upper()] = float(ts)
+                except (TypeError, ValueError):
+                    continue
+    except FileNotFoundError:
+        data = {}
+    except Exception as e:
+        logger.warning(f"Error loading bad tickers cache: {e}")
+        data = {}
+
+    pruned = _prune_bad_tickers(data)
+    if pruned != data:
+        _BAD_TICKERS_DIRTY = True
+    _BAD_TICKERS = pruned
+    return _BAD_TICKERS
+
+
+def _save_bad_tickers() -> None:
+    global _BAD_TICKERS_DIRTY
+    if not _BAD_TICKERS_DIRTY:
+        return
+    if _BAD_TICKERS is None:
+        return
+    path = _bad_tickers_path()
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(_BAD_TICKERS, handle, indent=2, sort_keys=True)
+        _BAD_TICKERS_DIRTY = False
+    except Exception as e:
+        logger.warning(f"Error saving bad tickers cache: {e}")
+
+
+def _bad_tickers_enabled() -> bool:
+    return _env_bool(BAD_TICKERS_ENABLED_ENV, True)
+
+
+def _mark_bad_ticker(ticker: str) -> None:
+    global _BAD_TICKERS_DIRTY
+    if not _bad_tickers_enabled():
+        return
+    bad = _load_bad_tickers()
+    upper = ticker.upper()
+    bad[upper] = time.time()
+    _BAD_TICKERS_DIRTY = True
+
+
+def _split_bad_tickers(tickers: List[str]) -> Tuple[List[str], List[str]]:
+    if not _bad_tickers_enabled():
+        return tickers, []
+    bad = _load_bad_tickers()
+    if not bad:
+        return tickers, []
+
+    kept: List[str] = []
+    skipped: List[str] = []
+    for ticker in tickers:
+        if ticker.upper() in bad:
+            skipped.append(ticker)
+        else:
+            kept.append(ticker)
+    return kept, skipped
 
 
 def _to_stooq_symbol(ticker: str) -> Optional[str]:
@@ -483,15 +605,28 @@ def screen_stocks(
         List of stocks matching criteria
     """
     results = []
-    total = len(tickers)
     processed = 0
     provider = _normalize_provider(price_provider)
-
-    logger.info(f"Screening {total} stocks for drops in last {lookback_days} days...")
-    logger.info(f"Using price provider: {provider}")
+    original_total = len(tickers)
+    skipped_for_yf: List[str] = []
 
     if provider in ("yfinance", "auto"):
-        missing = set() if provider == "auto" else None
+        tickers, skipped_for_yf = _split_bad_tickers(tickers)
+
+    total = len(tickers)
+
+    logger.info(f"Screening {original_total} stocks for drops in last {lookback_days} days...")
+    logger.info(f"Using price provider: {provider}")
+    if skipped_for_yf:
+        if provider == "auto":
+            logger.info(
+                f"Skipping Yahoo for {len(skipped_for_yf)} tickers marked inactive; will try Stooq."
+            )
+        else:
+            logger.info(f"Skipping {len(skipped_for_yf)} tickers marked inactive from prior runs.")
+
+    if provider in ("yfinance", "auto"):
+        missing = set(skipped_for_yf) if provider == "auto" else None
 
         for batch in _chunked(tickers, batch_size):
             try:
@@ -523,6 +658,7 @@ def screen_stocks(
                 if ticker_hist is None or ticker_hist.empty:
                     if missing is not None:
                         missing.add(ticker)
+                    _mark_bad_ticker(ticker)
                     continue
 
                 data = get_stock_data(
@@ -600,6 +736,8 @@ def screen_stocks(
     results.sort(key=lambda x: x["drop_pct"], reverse=True)
 
     logger.info(f"Screening complete. Found {len(results)} stocks matching criteria.")
+
+    _save_bad_tickers()
 
     return results
 
