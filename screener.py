@@ -382,24 +382,36 @@ def _get_history_for_ticker(hist: pd.DataFrame, ticker: str) -> Optional[pd.Data
 
 
 def _calculate_drop(hist: pd.DataFrame, lookback_days: int) -> Optional[Tuple[float, float, float]]:
-    hist = hist.dropna(subset=["Close", "High"])
+    """
+    Calculate price drop using closing prices.
+    Formula: (close_today - close_previous) / close_previous * 100
+
+    lookback_days=1: compare today vs yesterday
+    lookback_days=2: compare today vs 2 days ago
+    """
+    hist = hist.dropna(subset=["Close"])
     if len(hist) < 2:
         return None
 
-    current_price = float(hist["Close"].iloc[-1])
+    current_price = float(hist["Close"].iloc[-1])  # Today's close
 
+    # Get previous closing price based on lookback days
     if lookback_days == 1 and len(hist) >= 2:
-        reference_high = float(hist["High"].iloc[-2])
+        previous_close = float(hist["Close"].iloc[-2])  # Yesterday
     elif lookback_days == 2 and len(hist) >= 3:
-        reference_high = float(max(hist["High"].iloc[-3], hist["High"].iloc[-2]))
+        previous_close = float(hist["Close"].iloc[-3])  # 2 days ago
     else:
-        reference_high = float(hist["High"].iloc[-2])
+        previous_close = float(hist["Close"].iloc[-2])  # Default to yesterday
 
-    if reference_high <= 0:
+    if previous_close <= 0:
         return None
 
-    drop_pct = ((reference_high - current_price) / reference_high) * 100
-    return current_price, reference_high, drop_pct
+    # Formula: (close_today - close_yesterday) / close_yesterday * 100
+    # Negative result = price dropped, so we negate to get positive drop percentage
+    change_pct = ((current_price - previous_close) / previous_close) * 100
+    drop_pct = -change_pct  # Convert to positive drop percentage
+
+    return current_price, previous_close, drop_pct
 
 
 def get_stock_data(
@@ -454,7 +466,7 @@ def get_stock_data(
 
         return {
             "ticker": ticker,
-            "name": info.get("shortName", info.get("longName", ticker)),
+            "name": info.get("longName", info.get("shortName", ticker)),
             "sector": info.get("sector", "N/A"),
             "industry": info.get("industry", "N/A"),
             "current_price": float(round(current_price, 2)),
@@ -780,7 +792,7 @@ def get_stock_details(
 
         return {
             "ticker": ticker,
-            "name": info.get("shortName", info.get("longName", ticker)),
+            "name": info.get("longName", info.get("shortName", ticker)),
             "sector": info.get("sector", "N/A"),
             "industry": info.get("industry", "N/A"),
             "description": info.get("longBusinessSummary", ""),
