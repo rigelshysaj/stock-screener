@@ -51,6 +51,30 @@ MODERATE_KEYWORDS = [
     "restructuring", "cost cutting", "margin pressure"
 ]
 
+# Positive keywords that indicate good news (override negative TextBlob sentiment)
+POSITIVE_KEYWORDS = [
+    # Analyst upgrades
+    "upgraded to buy", "upgrade to buy", "upgraded to outperform", "upgrade to outperform",
+    "upgraded to overweight", "upgrade to overweight", "upgraded to strong buy",
+    "buy rating", "outperform rating", "overweight rating", "strong buy",
+    "price target raised", "price target increased", "raises price target",
+    "increases price target", "bullish", "bull case",
+
+    # Earnings/Revenue
+    "earnings beat", "beat earnings", "beats earnings", "revenue beat", "beat revenue",
+    "beats revenue", "exceeds expectations", "exceeded expectations", "beat expectations",
+    "beats expectations", "better than expected", "above expectations",
+    "record revenue", "record earnings", "record profit", "strong earnings",
+    "strong revenue", "guidance raised", "raises guidance", "raised guidance",
+
+    # Business positive
+    "fda approval", "fda approved", "receives approval", "granted approval",
+    "contract win", "wins contract", "won contract", "new contract",
+    "partnership", "strategic partnership", "acquisition", "merger approved",
+    "dividend increase", "raises dividend", "special dividend", "buyback",
+    "share repurchase", "stock buyback"
+]
+
 PRICE_MOVE_TERMS = [
     "stock", "stocks", "share", "shares", "price", "prices", "equity"
 ]
@@ -111,7 +135,7 @@ def fetch_news_google(query: str, num_results: int = 10) -> List[Dict]:
 
 def analyze_sentiment(text: str) -> Dict:
     """
-    Analyze sentiment of text using TextBlob.
+    Analyze sentiment of text using TextBlob + financial keyword detection.
 
     Returns:
         Dict with polarity (-1 to 1), subjectivity (0 to 1), and interpretation
@@ -119,6 +143,22 @@ def analyze_sentiment(text: str) -> Dict:
     blob = TextBlob(text)
     polarity = blob.sentiment.polarity
     subjectivity = blob.sentiment.subjectivity
+
+    # Check for financial keywords that override TextBlob
+    has_positive, positive_kw = check_positive_keywords(text)
+    has_critical, critical_kw = check_critical_keywords(text)
+    has_moderate, moderate_kw = check_moderate_keywords(text)
+
+    # Override polarity based on financial context
+    if has_positive and not has_critical:
+        # Positive financial news - boost polarity
+        polarity = max(polarity, 0.5)
+    elif has_critical:
+        # Critical issues - force negative
+        polarity = min(polarity, -0.5)
+    elif has_moderate and not has_positive:
+        # Moderate concerns - nudge negative
+        polarity = min(polarity, -0.2)
 
     if polarity > 0.1:
         interpretation = "positive"
@@ -178,6 +218,23 @@ def check_moderate_keywords(text: str) -> Tuple[bool, List[str]]:
     found = []
 
     for keyword in MODERATE_KEYWORDS:
+        if keyword in text_lower:
+            found.append(keyword)
+
+    return len(found) > 0, found
+
+
+def check_positive_keywords(text: str) -> Tuple[bool, List[str]]:
+    """
+    Check if text contains positive financial keywords.
+
+    Returns:
+        Tuple of (has_positive, list of found keywords)
+    """
+    text_lower = text.lower()
+    found = []
+
+    for keyword in POSITIVE_KEYWORDS:
         if keyword in text_lower:
             found.append(keyword)
 
