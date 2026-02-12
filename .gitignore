@@ -25,3 +25,4 @@ Thumbs.db
 # Local development
 .env
 *.sqlite3
+saved_stocks.json

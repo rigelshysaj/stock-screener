@@ -32,17 +32,25 @@ body {
     margin-bottom: 0;
 }
 
+/* Tabs */
+#mainTabs .nav-link {
+    font-weight: 500;
+}
+
 /* Table Styles */
-#results-table {
+#results-table,
+#saved-table {
     font-size: 0.9rem;
 }
 
-#results-table th {
+#results-table th,
+#saved-table th {
     white-space: nowrap;
     background-color: #f1f3f5;
 }
 
-#results-table td {
+#results-table td,
+#saved-table td {
     vertical-align: middle;
 }
 
@@ -225,7 +233,8 @@ body {
         grid-template-columns: 1fr;
     }
 
-    #results-table {
+    #results-table,
+    #saved-table {
         font-size: 0.8rem;
     }
 }

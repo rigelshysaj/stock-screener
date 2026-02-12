@@ -3,15 +3,20 @@ Stock Screener Web Application
 Flask backend for screening stocks with 20-30% price drops and news sentiment analysis.
 """
 
+import json
 import logging
 import os
 import time
 
 from flask import Flask, render_template, jsonify, request
 
+import yfinance as yf
+
 from screener import screen_stocks, get_stock_details
 from news_analyzer import analyze_stock_news
 from stock_lists import MARKETS, get_tickers_by_markets
+
+SAVED_STOCKS_FILE = os.path.join(os.path.dirname(__file__), 'saved_stocks.json')
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -274,6 +279,100 @@ def get_stock_news(ticker):
     except Exception as e:
         logger.error(f"Error fetching news for {ticker}: {e}")
         return jsonify({"error": "Failed to fetch news"}), 500
+
+
+@app.route('/api/current-prices', methods=['POST'])
+def get_current_prices():
+    """Fetch current live prices for a list of tickers."""
+    data = request.get_json() or {}
+    tickers = data.get('tickers', [])
+    if not tickers:
+        return jsonify({"error": "No tickers provided"}), 400
+
+    prices = {}
+    try:
+        ticker_str = ' '.join(tickers)
+        df = yf.download(ticker_str, period='1d', progress=False)
+        if df is not None and not df.empty:
+            close = df['Close']
+            if isinstance(close, (float, int)):
+                # single ticker
+                prices[tickers[0]] = round(float(close.iloc[-1]), 2)
+            else:
+                if close.ndim == 1:
+                    prices[tickers[0]] = round(float(close.iloc[-1]), 2)
+                else:
+                    for t in tickers:
+                        if t in close.columns:
+                            val = close[t].dropna()
+                            if not val.empty:
+                                prices[t] = round(float(val.iloc[-1]), 2)
+    except Exception as e:
+        logger.error(f"Error fetching current prices: {e}")
+
+    return jsonify({"prices": prices})
+
+
+def _load_saved_stocks():
+    if os.path.exists(SAVED_STOCKS_FILE):
+        try:
+            with open(SAVED_STOCKS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+
+def _save_saved_stocks(stocks):
+    with open(SAVED_STOCKS_FILE, 'w') as f:
+        json.dump(stocks, f, indent=2)
+
+
+@app.route('/api/saved-stocks', methods=['GET'])
+def get_saved_stocks():
+    """Get all saved stocks."""
+    return jsonify(_load_saved_stocks())
+
+
+@app.route('/api/saved-stocks', methods=['POST'])
+def save_stocks():
+    """Save stocks from scan results."""
+    data = request.get_json() or {}
+    stocks_to_save = data.get('stocks', [])
+    if not stocks_to_save:
+        return jsonify({"error": "No stocks provided"}), 400
+
+    saved = _load_saved_stocks()
+    saved_at = time.time()
+
+    for stock in stocks_to_save:
+        stock['price_when_saved'] = stock.get('current_price')
+        stock['saved_at'] = saved_at
+        # Remove duplicates by ticker + saved_at combo
+        saved = [s for s in saved if not (s['ticker'] == stock['ticker'] and s['saved_at'] == saved_at)]
+        saved.append(stock)
+
+    _save_saved_stocks(saved)
+    return jsonify({"saved": len(stocks_to_save), "total": len(saved)})
+
+
+@app.route('/api/saved-stocks', methods=['DELETE'])
+def delete_saved_stocks():
+    """Delete saved stocks by saved_at timestamp."""
+    data = request.get_json() or {}
+    saved_at = data.get('saved_at')
+    ticker = data.get('ticker')
+
+    saved = _load_saved_stocks()
+    if saved_at:
+        saved = [s for s in saved if s.get('saved_at') != saved_at]
+    elif ticker:
+        saved = [s for s in saved if s.get('ticker') != ticker]
+    else:
+        saved = []
+
+    _save_saved_stocks(saved)
+    return jsonify({"remaining": len(saved)})
 
 
 @app.route('/api/health')

@@ -89,29 +89,88 @@
             <span id="status-text">Scanning...</span>
         </div>
 
-        <!-- Results Card -->
-        <div class="card" id="results-card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Results</h5>
-                <span id="results-count" class="badge bg-success">0 stocks found</span>
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-0" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="scan-tab" data-bs-toggle="tab" data-bs-target="#scan-results-pane" type="button" role="tab">Scan Results</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="saved-tab" data-bs-toggle="tab" data-bs-target="#saved-stocks-pane" type="button" role="tab" onclick="loadSavedStocks()">
+                    Saved Stocks <span id="saved-count-badge" class="badge bg-secondary ms-1" style="display:none">0</span>
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <!-- Scan Results Tab -->
+            <div class="tab-pane fade show active" id="scan-results-pane" role="tabpanel">
+                <div class="card border-top-0 rounded-top-0" id="results-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Results</h5>
+                        <div>
+                            <button class="btn btn-sm btn-success me-2 d-none" id="save-results-btn" onclick="saveCurrentResults()">
+                                Save Results
+                            </button>
+                            <span id="results-count" class="badge bg-success">0 stocks found</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table id="results-table" class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th>Name</th>
+                                        <th>Sector</th>
+                                        <th>Current</th>
+                                        <th>Before Drop</th>
+                                        <th>Drop %</th>
+                                        <th>Safety</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="results-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table id="results-table" class="table table-striped table-hover">
-                        <thead>
-                            <tr>
-                                <th>Ticker</th>
-                                <th>Name</th>
-                                <th>Sector</th>
-                                <th>Current</th>
-                                <th>Before Drop</th>
-                                <th>Drop %</th>
-                                <th>Safety</th>
-                            </tr>
-                        </thead>
-                        <tbody id="results-body">
-                        </tbody>
-                    </table>
+
+            <!-- Saved Stocks Tab -->
+            <div class="tab-pane fade" id="saved-stocks-pane" role="tabpanel">
+                <div class="card border-top-0 rounded-top-0">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Saved Stocks</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-danger d-none" id="clear-saved-btn" onclick="clearAllSaved()">
+                                Clear All
+                            </button>
+                            <span id="saved-stocks-count" class="badge bg-info">0 saved</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="saved-loading" class="text-center py-3 d-none">
+                            <div class="spinner-border spinner-border-sm text-primary"></div>
+                            <span class="ms-2">Loading current prices...</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table id="saved-table" class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th>Name</th>
+                                        <th>Sector</th>
+                                        <th>Current</th>
+                                        <th>Price When Saved</th>
+                                        <th>Before Drop</th>
+                                        <th>Drop %</th>
+                                        <th>Saved</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
