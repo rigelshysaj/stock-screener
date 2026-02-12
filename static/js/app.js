@@ -582,12 +582,10 @@ async function saveCurrentResults() {
         if (!response.ok) throw new Error('Failed to save');
 
         const data = await response.json();
-        $('#save-results-btn').text(`Saved! (${data.saved})`).addClass('btn-outline-success').removeClass('btn-success');
+        let label = `Saved ${data.saved}`;
+        if (data.skipped > 0) label += ` (${data.skipped} already saved)`;
+        $('#save-results-btn').text(label).addClass('btn-outline-success').removeClass('btn-success');
         updateSavedBadge();
-
-        setTimeout(() => {
-            $('#save-results-btn').text('Save Results').removeClass('btn-outline-success').addClass('btn-success').prop('disabled', false);
-        }, 2000);
 
     } catch (error) {
         console.error('Save error:', error);

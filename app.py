@@ -16,7 +16,7 @@ from screener import screen_stocks, get_stock_details
 from news_analyzer import analyze_stock_news
 from stock_lists import MARKETS, get_tickers_by_markets
 
-SAVED_STOCKS_FILE = os.path.join(os.path.dirname(__file__), 'saved_stocks.json')
+SAVED_STOCKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_stocks.json')
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -336,24 +336,29 @@ def get_saved_stocks():
 
 @app.route('/api/saved-stocks', methods=['POST'])
 def save_stocks():
-    """Save stocks from scan results."""
+    """Save stocks from scan results. Skips tickers already saved."""
     data = request.get_json() or {}
     stocks_to_save = data.get('stocks', [])
     if not stocks_to_save:
         return jsonify({"error": "No stocks provided"}), 400
 
     saved = _load_saved_stocks()
+    existing_tickers = {s['ticker'] for s in saved}
     saved_at = time.time()
+    added = 0
 
     for stock in stocks_to_save:
+        if stock['ticker'] in existing_tickers:
+            continue
         stock['price_when_saved'] = stock.get('current_price')
         stock['saved_at'] = saved_at
-        # Remove duplicates by ticker + saved_at combo
-        saved = [s for s in saved if not (s['ticker'] == stock['ticker'] and s['saved_at'] == saved_at)]
         saved.append(stock)
+        existing_tickers.add(stock['ticker'])
+        added += 1
 
     _save_saved_stocks(saved)
-    return jsonify({"saved": len(stocks_to_save), "total": len(saved)})
+    skipped = len(stocks_to_save) - added
+    return jsonify({"saved": added, "skipped": skipped, "total": len(saved)})
 
 
 @app.route('/api/saved-stocks', methods=['DELETE'])
