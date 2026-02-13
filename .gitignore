@@ -26,3 +26,4 @@ Thumbs.db
 .env
 *.sqlite3
 saved_stocks.json
+saved_stocks.db
