@@ -3,8 +3,10 @@ Stock Screener Web Application
 Flask backend for screening stocks with 20-30% price drops and news sentiment analysis.
 """
 
+import json
 import logging
 import os
+import sqlite3
 import time
 
 from flask import Flask, render_template, jsonify, request
@@ -14,11 +16,122 @@ import yfinance as yf
 from screener import screen_stocks, get_stock_details
 from news_analyzer import analyze_stock_news
 from stock_lists import MARKETS, get_tickers_by_markets
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+# ---------------------------------------------------------------------------
+# Database layer: PostgreSQL on Render, SQLite locally
+# ---------------------------------------------------------------------------
+DATABASE_URL = os.getenv('DATABASE_URL')  # Set by Render when linking a PostgreSQL DB
+
+_pg_pool = None
+
+
+def _get_pg():
+    """Return a connection from the psycopg2 pool (PostgreSQL)."""
+    global _pg_pool
+    if _pg_pool is None:
+        import psycopg2
+        import psycopg2.pool
+        url = DATABASE_URL
+        # Render gives postgres:// but psycopg2 needs postgresql://
+        if url.startswith('postgres://'):
+            url = url.replace('postgres://', 'postgresql://', 1)
+        _pg_pool = psycopg2.pool.SimpleConnectionPool(1, 5, url)
+    return _pg_pool.getconn()
+
+
+def _put_pg(conn):
+    if _pg_pool:
+        _pg_pool.putconn(conn)
+
+
+def _init_db():
+    """Create the saved_stocks table if it doesn't exist."""
+    if DATABASE_URL:
+        conn = _get_pg()
+        try:
+            cur = conn.cursor()
+            cur.execute("""CREATE TABLE IF NOT EXISTS saved_stocks (
+                id SERIAL PRIMARY KEY,
+                ticker TEXT NOT NULL UNIQUE,
+                name TEXT,
+                sector TEXT,
+                currency TEXT,
+                price_when_saved REAL,
+                reference_price REAL,
+                high_52w REAL,
+                low_52w REAL,
+                drop_pct REAL,
+                saved_at DOUBLE PRECISION,
+                extra TEXT
+            )""")
+            conn.commit()
+            cur.close()
+        finally:
+            _put_pg(conn)
+        logger.info("Using PostgreSQL for saved stocks")
+    else:
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_stocks.db')
+        conn = sqlite3.connect(db_path)
+        conn.execute("""CREATE TABLE IF NOT EXISTS saved_stocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL UNIQUE,
+            name TEXT,
+            sector TEXT,
+            currency TEXT,
+            price_when_saved REAL,
+            reference_price REAL,
+            high_52w REAL,
+            low_52w REAL,
+            drop_pct REAL,
+            saved_at REAL,
+            extra TEXT
+        )""")
+        conn.commit()
+        conn.close()
+        logger.info("Using SQLite for saved stocks (no DATABASE_URL set)")
+
+
+def _db_execute(query, params=None, fetch=False):
+    """Execute a query against PostgreSQL or SQLite depending on env."""
+    if DATABASE_URL:
+        conn = _get_pg()
+        try:
+            cur = conn.cursor()
+            cur.execute(query, params)
+            if fetch:
+                cols = [d[0] for d in cur.description]
+                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+                cur.close()
+                return rows
+            conn.commit()
+            cur.close()
+            return None
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            _put_pg(conn)
+    else:
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_stocks.db')
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(query.replace('%s', '?'), params or ())
+        if fetch:
+            rows = [dict(r) for r in cur.fetchall()]
+            conn.close()
+            return rows
+        conn.commit()
+        conn.close()
+        return None
+
+
+_init_db()
 
 # Cache for responses (simple in-memory cache)
 scan_cache = {}
@@ -308,6 +421,81 @@ def get_current_prices():
         logger.error(f"Error fetching current prices: {e}")
 
     return jsonify({"prices": prices})
+
+
+@app.route('/api/saved-stocks', methods=['GET'])
+def get_saved_stocks():
+    """Get all saved stocks."""
+    rows = _db_execute("SELECT * FROM saved_stocks ORDER BY saved_at DESC", fetch=True)
+    result = []
+    for r in rows:
+        d = {k: r[k] for k in ('ticker', 'name', 'sector', 'currency',
+                                'price_when_saved', 'reference_price',
+                                'high_52w', 'low_52w', 'drop_pct', 'saved_at')}
+        if r.get('extra'):
+            try:
+                d.update(json.loads(r['extra']))
+            except Exception:
+                pass
+        result.append(d)
+    return jsonify(result)
+
+
+@app.route('/api/saved-stocks', methods=['POST'])
+def save_stocks():
+    """Save stocks from scan results. Skips tickers already saved."""
+    data = request.get_json() or {}
+    stocks_to_save = data.get('stocks', [])
+    if not stocks_to_save:
+        return jsonify({"error": "No stocks provided"}), 400
+
+    existing_rows = _db_execute("SELECT ticker FROM saved_stocks", fetch=True)
+    existing = {r['ticker'] for r in existing_rows}
+    saved_at = time.time()
+    added = 0
+
+    for stock in stocks_to_save:
+        t = stock.get('ticker')
+        if t in existing:
+            continue
+        extra = {k: stock[k] for k in stock
+                 if k not in ('ticker', 'name', 'sector', 'currency',
+                              'current_price', 'reference_price',
+                              'high_52w', 'low_52w', 'drop_pct')}
+        _db_execute(
+            """INSERT INTO saved_stocks
+               (ticker, name, sector, currency, price_when_saved,
+                reference_price, high_52w, low_52w, drop_pct, saved_at, extra)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (t, stock.get('name'), stock.get('sector'),
+             stock.get('currency'), stock.get('current_price'),
+             stock.get('reference_price'), stock.get('high_52w'),
+             stock.get('low_52w'), stock.get('drop_pct'),
+             saved_at, json.dumps(extra) if extra else None)
+        )
+        existing.add(t)
+        added += 1
+
+    total_rows = _db_execute("SELECT COUNT(*) as cnt FROM saved_stocks", fetch=True)
+    total = total_rows[0]['cnt'] if total_rows else 0
+    skipped = len(stocks_to_save) - added
+    return jsonify({"saved": added, "skipped": skipped, "total": total})
+
+
+@app.route('/api/saved-stocks', methods=['DELETE'])
+def delete_saved_stocks():
+    """Delete saved stocks."""
+    data = request.get_json() or {}
+    ticker = data.get('ticker')
+
+    if ticker:
+        _db_execute("DELETE FROM saved_stocks WHERE ticker = %s", (ticker,))
+    else:
+        _db_execute("DELETE FROM saved_stocks")
+
+    remaining_rows = _db_execute("SELECT COUNT(*) as cnt FROM saved_stocks", fetch=True)
+    remaining = remaining_rows[0]['cnt'] if remaining_rows else 0
+    return jsonify({"remaining": remaining})
 
 
 @app.route('/api/health')
