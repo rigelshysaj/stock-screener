@@ -3,10 +3,8 @@ Stock Screener Web Application
 Flask backend for screening stocks with 20-30% price drops and news sentiment analysis.
 """
 
-import json
 import logging
 import os
-import sqlite3
 import time
 
 from flask import Flask, render_template, jsonify, request
@@ -16,8 +14,6 @@ import yfinance as yf
 from screener import screen_stocks, get_stock_details
 from news_analyzer import analyze_stock_news
 from stock_lists import MARKETS, get_tickers_by_markets
-
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_stocks.db')
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -312,119 +308,6 @@ def get_current_prices():
         logger.error(f"Error fetching current prices: {e}")
 
     return jsonify({"prices": prices})
-
-
-def _get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("""CREATE TABLE IF NOT EXISTS saved_stocks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ticker TEXT NOT NULL UNIQUE,
-        name TEXT,
-        sector TEXT,
-        currency TEXT,
-        price_when_saved REAL,
-        reference_price REAL,
-        high_52w REAL,
-        low_52w REAL,
-        drop_pct REAL,
-        saved_at REAL,
-        extra TEXT
-    )""")
-    conn.commit()
-    return conn
-
-
-def _row_to_dict(row):
-    d = {
-        "ticker": row["ticker"],
-        "name": row["name"],
-        "sector": row["sector"],
-        "currency": row["currency"],
-        "price_when_saved": row["price_when_saved"],
-        "reference_price": row["reference_price"],
-        "high_52w": row["high_52w"],
-        "low_52w": row["low_52w"],
-        "drop_pct": row["drop_pct"],
-        "saved_at": row["saved_at"],
-    }
-    if row["extra"]:
-        try:
-            d.update(json.loads(row["extra"]))
-        except Exception:
-            pass
-    return d
-
-
-@app.route('/api/saved-stocks', methods=['GET'])
-def get_saved_stocks():
-    """Get all saved stocks."""
-    conn = _get_db()
-    rows = conn.execute("SELECT * FROM saved_stocks ORDER BY saved_at DESC").fetchall()
-    conn.close()
-    return jsonify([_row_to_dict(r) for r in rows])
-
-
-@app.route('/api/saved-stocks', methods=['POST'])
-def save_stocks():
-    """Save stocks from scan results. Skips tickers already saved."""
-    data = request.get_json() or {}
-    stocks_to_save = data.get('stocks', [])
-    if not stocks_to_save:
-        return jsonify({"error": "No stocks provided"}), 400
-
-    conn = _get_db()
-    existing = {r[0] for r in conn.execute("SELECT ticker FROM saved_stocks").fetchall()}
-    saved_at = time.time()
-    added = 0
-
-    for stock in stocks_to_save:
-        t = stock.get('ticker')
-        if t in existing:
-            continue
-        extra_keys = {k: stock[k] for k in stock
-                      if k not in ('ticker', 'name', 'sector', 'currency',
-                                   'current_price', 'reference_price',
-                                   'high_52w', 'low_52w', 'drop_pct')}
-        conn.execute(
-            """INSERT OR IGNORE INTO saved_stocks
-               (ticker, name, sector, currency, price_when_saved,
-                reference_price, high_52w, low_52w, drop_pct, saved_at, extra)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (t, stock.get('name'), stock.get('sector'),
-             stock.get('currency'), stock.get('current_price'),
-             stock.get('reference_price'), stock.get('high_52w'),
-             stock.get('low_52w'), stock.get('drop_pct'),
-             saved_at, json.dumps(extra_keys) if extra_keys else None)
-        )
-        existing.add(t)
-        added += 1
-
-    conn.commit()
-    total = conn.execute("SELECT COUNT(*) FROM saved_stocks").fetchone()[0]
-    conn.close()
-    skipped = len(stocks_to_save) - added
-    return jsonify({"saved": added, "skipped": skipped, "total": total})
-
-
-@app.route('/api/saved-stocks', methods=['DELETE'])
-def delete_saved_stocks():
-    """Delete saved stocks."""
-    data = request.get_json() or {}
-    saved_at = data.get('saved_at')
-    ticker = data.get('ticker')
-
-    conn = _get_db()
-    if saved_at:
-        conn.execute("DELETE FROM saved_stocks WHERE saved_at = ?", (saved_at,))
-    elif ticker:
-        conn.execute("DELETE FROM saved_stocks WHERE ticker = ?", (ticker,))
-    else:
-        conn.execute("DELETE FROM saved_stocks")
-    conn.commit()
-    remaining = conn.execute("SELECT COUNT(*) FROM saved_stocks").fetchone()[0]
-    conn.close()
-    return jsonify({"remaining": remaining})
 
 
 @app.route('/api/health')

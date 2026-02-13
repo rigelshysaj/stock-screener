@@ -543,8 +543,22 @@ function formatSafetyBadge(score, assessment, message) {
 }
 
 // ============================================================
-// Saved Stocks Feature
+// Saved Stocks Feature (localStorage - persists in browser)
 // ============================================================
+
+const STORAGE_KEY = 'stockScreener_savedStocks';
+
+function getSavedStocks() {
+    try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function setSavedStocks(stocks) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
+}
 
 function initSavedDataTable() {
     if (savedDataTable) {
@@ -552,7 +566,7 @@ function initSavedDataTable() {
     }
     savedDataTable = $('#saved-table').DataTable({
         pageLength: 25,
-        order: [[7, 'desc']], // Sort by saved date descending
+        order: [[7, 'desc']],
         language: {
             emptyTable: "No saved stocks yet. Run a scan and click 'Save Results' to save."
         },
@@ -563,147 +577,121 @@ function initSavedDataTable() {
     });
 }
 
-// Save current scan results
-async function saveCurrentResults() {
+function saveCurrentResults() {
     if (currentResults.length === 0) {
         alert('No results to save.');
         return;
     }
 
-    $('#save-results-btn').prop('disabled', true).text('Saving...');
+    const saved = getSavedStocks();
+    const existingTickers = new Set(saved.map(s => s.ticker));
+    const savedAt = Date.now();
+    let added = 0;
 
-    try {
-        const response = await fetch('/api/saved-stocks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ stocks: currentResults })
+    for (const stock of currentResults) {
+        if (existingTickers.has(stock.ticker)) continue;
+        saved.push({
+            ticker: stock.ticker,
+            name: stock.name,
+            sector: stock.sector,
+            currency: stock.currency,
+            price_when_saved: stock.current_price,
+            reference_price: stock.reference_price,
+            high_52w: stock.high_52w,
+            drop_pct: stock.drop_pct,
+            saved_at: savedAt
         });
-
-        if (!response.ok) throw new Error('Failed to save');
-
-        const data = await response.json();
-        let label = `Saved ${data.saved}`;
-        if (data.skipped > 0) label += ` (${data.skipped} already saved)`;
-        $('#save-results-btn').text(label).addClass('btn-outline-success').removeClass('btn-success');
-        updateSavedBadge();
-
-    } catch (error) {
-        console.error('Save error:', error);
-        alert('Error saving results: ' + error.message);
-        $('#save-results-btn').prop('disabled', false).text('Save Results');
+        existingTickers.add(stock.ticker);
+        added++;
     }
+
+    setSavedStocks(saved);
+
+    const skipped = currentResults.length - added;
+    let label = `Saved ${added}`;
+    if (skipped > 0) label += ` (${skipped} already saved)`;
+    $('#save-results-btn').prop('disabled', true).text(label).addClass('btn-outline-success').removeClass('btn-success');
+    updateSavedBadge();
 }
 
-// Load and display saved stocks with live current prices
 async function loadSavedStocks() {
     savedDataTable.clear().draw();
-    $('#saved-loading').removeClass('d-none');
 
-    try {
-        const response = await fetch('/api/saved-stocks');
-        if (!response.ok) throw new Error('Failed to load saved stocks');
-        const savedStocks = await response.json();
+    const savedStocks = getSavedStocks();
 
-        if (savedStocks.length === 0) {
-            $('#saved-loading').addClass('d-none');
-            $('#saved-stocks-count').text('0 saved');
-            $('#clear-saved-btn').addClass('d-none');
-            return;
-        }
-
-        $('#saved-stocks-count').text(`${savedStocks.length} saved`);
-        $('#clear-saved-btn').removeClass('d-none');
-
-        // Fetch current prices for all saved tickers
-        const tickers = [...new Set(savedStocks.map(s => s.ticker))];
-        let currentPrices = {};
-
-        try {
-            const priceResp = await fetch('/api/current-prices', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tickers: tickers })
-            });
-            if (priceResp.ok) {
-                const priceData = await priceResp.json();
-                currentPrices = priceData.prices || {};
-            }
-        } catch (e) {
-            console.warn('Could not fetch current prices:', e);
-        }
-
+    if (savedStocks.length === 0) {
         $('#saved-loading').addClass('d-none');
-
-        // Display saved stocks with current prices
-        savedDataTable.clear();
-        savedStocks.forEach(stock => {
-            const livePrice = currentPrices[stock.ticker];
-            const savedDate = new Date(stock.saved_at * 1000);
-            const dateStr = savedDate.toLocaleDateString() + ' ' + savedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-
-            savedDataTable.row.add([
-                formatTicker(stock.ticker),
-                truncateName(stock.name, 30),
-                stock.sector || 'N/A',
-                livePrice ? formatPrice(livePrice, stock.currency) : '<span class="text-muted">N/A</span>',
-                formatPrice(stock.price_when_saved, stock.currency),
-                formatPrice(stock.reference_price || stock.high_52w, stock.currency),
-                formatDropPct(stock.drop_pct),
-                `<span class="small text-muted">${dateStr}</span>`
-            ]);
-        });
-
-        savedDataTable.draw();
-
-        // Click handler for saved stocks table
-        $('#saved-table tbody').off('click').on('click', 'tr', function() {
-            const data = savedDataTable.row(this).data();
-            if (data && data[0]) {
-                const ticker = extractTicker(data[0]);
-                showStockDetails(ticker);
-            }
-        });
-        $('#saved-table tbody tr').addClass('clickable-row');
-
-    } catch (error) {
-        console.error('Error loading saved stocks:', error);
-        $('#saved-loading').addClass('d-none');
-    }
-}
-
-// Clear all saved stocks
-async function clearAllSaved() {
-    if (!confirm('Are you sure you want to delete all saved stocks?')) return;
-
-    try {
-        await fetch('/api/saved-stocks', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-        savedDataTable.clear().draw();
         $('#saved-stocks-count').text('0 saved');
         $('#clear-saved-btn').addClass('d-none');
-        updateSavedBadge();
-    } catch (error) {
-        console.error('Error clearing saved stocks:', error);
+        return;
     }
-}
 
-// Update the saved count badge on the tab
-async function updateSavedBadge() {
+    $('#saved-stocks-count').text(`${savedStocks.length} saved`);
+    $('#clear-saved-btn').removeClass('d-none');
+    $('#saved-loading').removeClass('d-none');
+
+    // Fetch live current prices from server
+    const tickers = [...new Set(savedStocks.map(s => s.ticker))];
+    let currentPrices = {};
     try {
-        const response = await fetch('/api/saved-stocks');
-        if (response.ok) {
-            const data = await response.json();
-            const badge = $('#saved-count-badge');
-            if (data.length > 0) {
-                badge.text(data.length).show();
-            } else {
-                badge.hide();
-            }
+        const resp = await fetch('/api/current-prices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tickers })
+        });
+        if (resp.ok) {
+            currentPrices = (await resp.json()).prices || {};
         }
     } catch (e) {
-        // ignore
+        console.warn('Could not fetch current prices:', e);
+    }
+
+    $('#saved-loading').addClass('d-none');
+
+    savedDataTable.clear();
+    savedStocks.forEach(stock => {
+        const livePrice = currentPrices[stock.ticker];
+        const savedDate = new Date(stock.saved_at);
+        const dateStr = savedDate.toLocaleDateString() + ' ' + savedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+        savedDataTable.row.add([
+            formatTicker(stock.ticker),
+            truncateName(stock.name, 30),
+            stock.sector || 'N/A',
+            livePrice ? formatPrice(livePrice, stock.currency) : '<span class="text-muted">N/A</span>',
+            formatPrice(stock.price_when_saved, stock.currency),
+            formatPrice(stock.reference_price || stock.high_52w, stock.currency),
+            formatDropPct(stock.drop_pct),
+            `<span class="small text-muted">${dateStr}</span>`
+        ]);
+    });
+
+    savedDataTable.draw();
+
+    $('#saved-table tbody').off('click').on('click', 'tr', function() {
+        const data = savedDataTable.row(this).data();
+        if (data && data[0]) {
+            showStockDetails(extractTicker(data[0]));
+        }
+    });
+    $('#saved-table tbody tr').addClass('clickable-row');
+}
+
+function clearAllSaved() {
+    if (!confirm('Are you sure you want to delete all saved stocks?')) return;
+    setSavedStocks([]);
+    savedDataTable.clear().draw();
+    $('#saved-stocks-count').text('0 saved');
+    $('#clear-saved-btn').addClass('d-none');
+    updateSavedBadge();
+}
+
+function updateSavedBadge() {
+    const count = getSavedStocks().length;
+    const badge = $('#saved-count-badge');
+    if (count > 0) {
+        badge.text(count).show();
+    } else {
+        badge.hide();
     }
 }
