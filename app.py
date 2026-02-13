@@ -24,111 +24,46 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # ---------------------------------------------------------------------------
-# Database layer: PostgreSQL on Render, SQLite locally
+# Database layer: SQLite (persistent on disk)
 # ---------------------------------------------------------------------------
-DATABASE_URL = os.getenv('DATABASE_URL')  # Set by Render when linking a PostgreSQL DB
-
-_pg_pool = None
-
-
-def _get_pg():
-    """Return a connection from the psycopg2 pool (PostgreSQL)."""
-    global _pg_pool
-    if _pg_pool is None:
-        import psycopg2
-        import psycopg2.pool
-        url = DATABASE_URL
-        # Render gives postgres:// but psycopg2 needs postgresql://
-        if url.startswith('postgres://'):
-            url = url.replace('postgres://', 'postgresql://', 1)
-        _pg_pool = psycopg2.pool.SimpleConnectionPool(1, 5, url)
-    return _pg_pool.getconn()
-
-
-def _put_pg(conn):
-    if _pg_pool:
-        _pg_pool.putconn(conn)
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'saved_stocks.db')
 
 
 def _init_db():
     """Create the saved_stocks table if it doesn't exist."""
-    if DATABASE_URL:
-        conn = _get_pg()
-        try:
-            cur = conn.cursor()
-            cur.execute("""CREATE TABLE IF NOT EXISTS saved_stocks (
-                id SERIAL PRIMARY KEY,
-                ticker TEXT NOT NULL UNIQUE,
-                name TEXT,
-                sector TEXT,
-                currency TEXT,
-                price_when_saved REAL,
-                reference_price REAL,
-                high_52w REAL,
-                low_52w REAL,
-                drop_pct REAL,
-                saved_at DOUBLE PRECISION,
-                extra TEXT
-            )""")
-            conn.commit()
-            cur.close()
-        finally:
-            _put_pg(conn)
-        logger.info("Using PostgreSQL for saved stocks")
-    else:
-        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_stocks.db')
-        conn = sqlite3.connect(db_path)
-        conn.execute("""CREATE TABLE IF NOT EXISTS saved_stocks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticker TEXT NOT NULL UNIQUE,
-            name TEXT,
-            sector TEXT,
-            currency TEXT,
-            price_when_saved REAL,
-            reference_price REAL,
-            high_52w REAL,
-            low_52w REAL,
-            drop_pct REAL,
-            saved_at REAL,
-            extra TEXT
-        )""")
-        conn.commit()
-        conn.close()
-        logger.info("Using SQLite for saved stocks (no DATABASE_URL set)")
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""CREATE TABLE IF NOT EXISTS saved_stocks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker TEXT NOT NULL UNIQUE,
+        name TEXT,
+        sector TEXT,
+        currency TEXT,
+        price_when_saved REAL,
+        reference_price REAL,
+        high_52w REAL,
+        low_52w REAL,
+        drop_pct REAL,
+        saved_at REAL,
+        extra TEXT
+    )""")
+    conn.commit()
+    conn.close()
+    logger.info(f"SQLite database ready at {DB_PATH}")
 
 
 def _db_execute(query, params=None, fetch=False):
-    """Execute a query against PostgreSQL or SQLite depending on env."""
-    if DATABASE_URL:
-        conn = _get_pg()
-        try:
-            cur = conn.cursor()
-            cur.execute(query, params)
-            if fetch:
-                cols = [d[0] for d in cur.description]
-                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-                cur.close()
-                return rows
-            conn.commit()
-            cur.close()
-            return None
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            _put_pg(conn)
-    else:
-        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_stocks.db')
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cur = conn.execute(query.replace('%s', '?'), params or ())
-        if fetch:
-            rows = [dict(r) for r in cur.fetchall()]
-            conn.close()
-            return rows
-        conn.commit()
+    """Execute a query against SQLite."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.execute(query, params or ())
+    if fetch:
+        rows = [dict(r) for r in cur.fetchall()]
         conn.close()
-        return None
+        return rows
+    conn.commit()
+    conn.close()
+    return None
 
 
 _init_db()
@@ -466,7 +401,7 @@ def save_stocks():
             """INSERT INTO saved_stocks
                (ticker, name, sector, currency, price_when_saved,
                 reference_price, high_52w, low_52w, drop_pct, saved_at, extra)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (t, stock.get('name'), stock.get('sector'),
              stock.get('currency'), stock.get('current_price'),
              stock.get('reference_price'), stock.get('high_52w'),
@@ -489,7 +424,7 @@ def delete_saved_stocks():
     ticker = data.get('ticker')
 
     if ticker:
-        _db_execute("DELETE FROM saved_stocks WHERE ticker = %s", (ticker,))
+        _db_execute("DELETE FROM saved_stocks WHERE ticker = ?", (ticker,))
     else:
         _db_execute("DELETE FROM saved_stocks")
 
